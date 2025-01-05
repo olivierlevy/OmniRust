@@ -1,0 +1,5 @@
+[database]
+url = "postgres://user:password@localhost/mydatabase"
+
+[log]
+level = "info"
