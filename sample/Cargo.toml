@@ -9,6 +9,9 @@ edition = "2021"
 omnirust = { path = ".." } # Depend on the omnirust library in the parent directory
 tokio = { version = "1", features = ["full"] }
 anyhow = "1.0" # For easy error handling in the sample app
+serde = { version = "1.0", features = ["derive"] } # For serialization/deserialization
+serde_json = "1.0" # For JSON specific deserialization
+clap = { version = "4.5", features = ["derive"] } # For CLI argument parsing
 
 # Add other dependencies the sample app might need directly
 # For example, if demonstrating gRPC client, it might need tonic/prost itself for generated types
