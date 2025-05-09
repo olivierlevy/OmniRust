@@ -84,11 +84,16 @@ async fn protected_route_handler() -> (StatusCode, &'static str) {
 
 /// Configures and returns the Axum router.
 pub fn app_router() -> Router {
+    // Define protected routes separately and apply middleware only to them
+    let protected_routes = Router::new()
+        .route("/protected", get(protected_route_handler))
+        .route_layer(middleware::from_fn(token_auth_middleware));
+
+    // Define public routes
     Router::new()
         .route("/hello", get(hello_world))
         .route("/users", get(get_users).post(create_user))
-        .route("/protected", get(protected_route_handler))
-            .route_layer(middleware::from_fn(token_auth_middleware))
+        .merge(protected_routes) // Merge the protected routes
     // Add more routes here
 }
 

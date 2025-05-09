@@ -195,7 +195,9 @@ mod tests {
     #[tokio::test]
     async fn test_add_item_mutation() {
         let _guard = TEST_MUTEX.lock().unwrap(); // Lock to ensure test serializes
-        ITEMS.lock().unwrap().clear(); // Ensure clean state
+        
+        // Setup: Clear state
+        ITEMS.lock().unwrap().clear(); 
         *NEXT_ID.lock().unwrap() = 1;
 
         let schema = create_schema();
@@ -235,14 +237,17 @@ mod tests {
 
         // Clean up static storage for other tests if necessary, though for this simple test it's okay.
         // For more complex scenarios, consider dependency injection for the store.
-        // Clean up is handled by the lock and explicit clear/reset at start of this test
-        // and potentially others if they also acquire the lock.
+        // Teardown: Clear state (optional here if next test also clears, but good practice)
+        ITEMS.lock().unwrap().clear();
+        *NEXT_ID.lock().unwrap() = 1;
     }
 
     #[tokio::test]
     async fn test_items_query_empty() {
         let _guard = TEST_MUTEX.lock().unwrap(); // Lock to ensure test serializes
-        ITEMS.lock().unwrap().clear(); // Ensure store is empty
+
+        // Setup: Clear state
+        ITEMS.lock().unwrap().clear(); 
         *NEXT_ID.lock().unwrap() = 1;
 
         let schema = create_schema();
@@ -257,6 +262,10 @@ mod tests {
         let res = schema.execute(query).await;
         let data = res.data.into_json().unwrap();
         assert!(data["items"].as_array().unwrap().is_empty());
+
+        // Teardown
+        ITEMS.lock().unwrap().clear();
+        *NEXT_ID.lock().unwrap() = 1;
     }
 
     #[tokio::test]
@@ -275,6 +284,8 @@ mod tests {
     #[tokio::test]
     async fn test_update_item_mutation() {
         let _guard = TEST_MUTEX.lock().unwrap(); // Lock to ensure test serializes
+
+        // Setup: Clear state
         ITEMS.lock().unwrap().clear();
         *NEXT_ID.lock().unwrap() = 1;
         let schema = create_schema();
@@ -324,6 +335,8 @@ mod tests {
     #[tokio::test]
     async fn test_delete_item_mutation() {
         let _guard = TEST_MUTEX.lock().unwrap(); // Lock to ensure test serializes
+
+        // Setup: Clear state
         ITEMS.lock().unwrap().clear();
         *NEXT_ID.lock().unwrap() = 1;
         let schema = create_schema();
@@ -358,6 +371,8 @@ mod tests {
     #[tokio::test]
     async fn test_item_events_subscription() {
         let _guard = TEST_MUTEX.lock().unwrap(); // Lock to ensure test serializes
+
+        // Setup: Clear state
         ITEMS.lock().unwrap().clear();
         *NEXT_ID.lock().unwrap() = 1;
         let schema = create_schema();
