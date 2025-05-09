@@ -75,6 +75,31 @@ message HelloReply { string message = 1; }
     for proto_file_str in proto_files_to_compile {
         println!("cargo:rerun-if-changed={}", proto_file_str);
     }
+
+    // Copy config.example.toml as config.toml to the output directory where the executable will be.
+    let profile = env::var("PROFILE")?; // "debug" or "release"
+    let target_dir = env::var("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| manifest_dir.join("target"));
+    let exe_out_dir = target_dir.join(profile);
+
+    let example_config_src = manifest_dir.join("config.example.toml");
+    // The destination file will be named config.toml
+    let final_config_dest = exe_out_dir.join("config.toml"); 
+
+    if example_config_src.exists() {
+        // Ensure the destination directory exists
+        if !exe_out_dir.exists() {
+            fs::create_dir_all(&exe_out_dir)
+                .map_err(|e| format!("Failed to create executable output directory {:?}: {}", exe_out_dir, e))?;
+        }
+        // Copy config.example.toml to target/{profile}/config.toml
+        fs::copy(&example_config_src, &final_config_dest)
+            .map_err(|e| format!("Failed to copy config.example.toml to {:?}: {}", final_config_dest, e))?;
+        println!("cargo:rerun-if-changed=config.example.toml"); 
+    } else {
+        println!("cargo:warning=config.example.toml not found at project root, not creating a default config.toml in target directory.");
+    }
     
     Ok(())
 }
