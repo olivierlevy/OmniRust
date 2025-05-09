@@ -197,13 +197,13 @@ mod tests {
             }
         "#;
         let res = schema.execute(query).await;
-        let data = res.data.into_json().unwrap();
+        let data = res.data.into_json().unwrap(); // data is serde_json::Value
         
-        assert_eq!(data["addItem"]["name"], value!("Test Item 1"));
-        assert!(data["addItem"]["id"].as_str().is_some()); // Check if ID is a non-empty string
+        assert_eq!(data["addItem"]["name"].as_str().unwrap(), "Test Item 1");
+        let item_id_from_add = data["addItem"]["id"].as_str().unwrap().to_string();
+        assert!(!item_id_from_add.is_empty());
 
         // Optionally, query for the item to ensure it's in the list
-        let item_id = data["addItem"]["id"].as_str().unwrap();
         let query_item = format!(r#"
             query {{
                 item(id: "{}") {{
@@ -211,12 +211,12 @@ mod tests {
                     name
                 }}
             }}
-        "#, item_id);
+        "#, item_id_from_add);
         let res_item = schema.execute(&query_item).await;
         let data_item = res_item.data.into_json().unwrap();
 
-        assert_eq!(data_item["item"]["name"], value!("Test Item 1"));
-        assert_eq!(data_item["item"]["id"], value!(item_id));
+        assert_eq!(data_item["item"]["name"].as_str().unwrap(), "Test Item 1");
+        assert_eq!(data_item["item"]["id"].as_str().unwrap(), item_id_from_add);
 
         // Clean up static storage for other tests if necessary, though for this simple test it's okay.
         // For more complex scenarios, consider dependency injection for the store.
@@ -253,7 +253,7 @@ mod tests {
         "#;
         let res = schema.execute(query).await;
         let data = res.data.into_json().unwrap();
-        assert_eq!(data["systemStatus"], value!("OmniRust System Nominal"));
+        assert_eq!(data["systemStatus"].as_str().unwrap(), "OmniRust System Nominal");
     }
 
     #[tokio::test]
@@ -280,14 +280,14 @@ mod tests {
         let update_res = schema.execute(&update_query).await;
         let update_data = update_res.data.into_json().unwrap();
 
-        assert_eq!(update_data["updateItem"]["id"], value!(item_id));
-        assert_eq!(update_data["updateItem"]["name"], value!("Updated Name"));
+        assert_eq!(update_data["updateItem"]["id"].as_str().unwrap(), item_id);
+        assert_eq!(update_data["updateItem"]["name"].as_str().unwrap(), "Updated Name");
 
         // Verify with a query
         let query_item = format!(r#"query {{ item(id: "{}") {{ name }} }}"#, item_id);
         let res_item = schema.execute(&query_item).await;
         let data_item = res_item.data.into_json().unwrap();
-        assert_eq!(data_item["item"]["name"], value!("Updated Name"));
+        assert_eq!(data_item["item"]["name"].as_str().unwrap(), "Updated Name");
 
         // Test updating non-existent item
         let update_non_existent_query = r#"
@@ -320,7 +320,7 @@ mod tests {
         let delete_query = format!(r#"mutation {{ deleteItem(id: "{}") }}"#, item_id);
         let delete_res = schema.execute(&delete_query).await;
         let delete_data = delete_res.data.into_json().unwrap();
-        assert_eq!(delete_data["deleteItem"], value!(true));
+        assert_eq!(delete_data["deleteItem"].as_bool().unwrap(), true);
 
         // Verify it's gone
         let query_item = format!(r#"query {{ item(id: "{}") {{ id }} }}"#, item_id);
@@ -331,7 +331,7 @@ mod tests {
         let delete_non_existent_query = r#"mutation { deleteItem(id: "nonexistent") }"#;
         let res_non_existent = schema.execute(delete_non_existent_query).await;
         let data_non_existent = res_non_existent.data.into_json().unwrap();
-        assert_eq!(data_non_existent["deleteItem"], value!(false));
+        assert_eq!(data_non_existent["deleteItem"].as_bool().unwrap(), false);
         
         ITEMS.lock().unwrap().clear();
         *NEXT_ID.lock().unwrap() = 1;
@@ -345,7 +345,7 @@ mod tests {
 
         // Start the subscription
         let sub_query = "subscription { itemEvents { eventType item { id name } } }";
-        let mut stream = schema.execute_stream(sub_query).await;
+        let mut stream = Box::pin(schema.execute_stream(sub_query)); // No .await here, and pin the stream
 
         // Perform addItem mutation
         let add_mutation = r#"mutation { addItem(name: "Sub Item 1") { id name } }"#;
@@ -355,11 +355,11 @@ mod tests {
         let added_item_name = add_data["addItem"]["name"].as_str().unwrap().to_string();
 
         // Check for ADDED event
-        let event_res = stream.next().await.unwrap();
+        let event_res = stream.next().await.unwrap(); // Now await on stream.next()
         let event_data = event_res.data.into_json().unwrap();
-        assert_eq!(event_data["itemEvents"]["eventType"], value!("ADDED"));
-        assert_eq!(event_data["itemEvents"]["item"]["id"], value!(added_item_id.clone()));
-        assert_eq!(event_data["itemEvents"]["item"]["name"], value!(added_item_name.clone()));
+        assert_eq!(event_data["itemEvents"]["eventType"].as_str().unwrap(), "ADDED");
+        assert_eq!(event_data["itemEvents"]["item"]["id"].as_str().unwrap(), added_item_id);
+        assert_eq!(event_data["itemEvents"]["item"]["name"].as_str().unwrap(), added_item_name);
 
         // Perform updateItem mutation
         let update_mutation = format!(r#"mutation {{ updateItem(id: "{}", name: "Sub Item 1 Updated") {{ id name }} }}"#, added_item_id);
@@ -368,9 +368,9 @@ mod tests {
         // Check for UPDATED event
         let event_res_update = stream.next().await.unwrap();
         let event_data_update = event_res_update.data.into_json().unwrap();
-        assert_eq!(event_data_update["itemEvents"]["eventType"], value!("UPDATED"));
-        assert_eq!(event_data_update["itemEvents"]["item"]["id"], value!(added_item_id.clone()));
-        assert_eq!(event_data_update["itemEvents"]["item"]["name"], value!("Sub Item 1 Updated"));
+        assert_eq!(event_data_update["itemEvents"]["eventType"].as_str().unwrap(), "UPDATED");
+        assert_eq!(event_data_update["itemEvents"]["item"]["id"].as_str().unwrap(), added_item_id);
+        assert_eq!(event_data_update["itemEvents"]["item"]["name"].as_str().unwrap(), "Sub Item 1 Updated");
 
         // Perform deleteItem mutation
         let delete_mutation = format!(r#"mutation {{ deleteItem(id: "{}") }}"#, added_item_id);
@@ -379,10 +379,10 @@ mod tests {
         // Check for DELETED event
         let event_res_delete = stream.next().await.unwrap();
         let event_data_delete = event_res_delete.data.into_json().unwrap();
-        assert_eq!(event_data_delete["itemEvents"]["eventType"], value!("DELETED"));
-        assert_eq!(event_data_delete["itemEvents"]["item"]["id"], value!(added_item_id.clone()));
+        assert_eq!(event_data_delete["itemEvents"]["eventType"].as_str().unwrap(), "DELETED");
+        assert_eq!(event_data_delete["itemEvents"]["item"]["id"].as_str().unwrap(), added_item_id);
         // The name of the deleted item might still be the last known name, which is "Sub Item 1 Updated"
-        assert_eq!(event_data_delete["itemEvents"]["item"]["name"], value!("Sub Item 1 Updated"));
+        assert_eq!(event_data_delete["itemEvents"]["item"]["name"].as_str().unwrap(), "Sub Item 1 Updated");
 
 
         ITEMS.lock().unwrap().clear();

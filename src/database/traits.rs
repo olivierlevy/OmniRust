@@ -24,9 +24,18 @@ pub trait DbConnection: Send + Sync {
     /// Returns a generic result or a specific error type.
     async fn execute_raw_query(&mut self, query: &str) -> QueryResult;
 
+    /// Executes a query and maps the results to a specified type `T`.
+    /// `T` must implement `sqlx::FromRow`.
+    ///
+    /// Note: Parameter binding is not handled at this trait level for simplicity.
+    /// Implementations should handle parameter binding if necessary (e.g., using `sqlx::query_as!(...)`
+    /// or by requiring pre-bound query objects if the trait were more complex).
+    async fn query_typed<T>(&mut self, query: &str) -> Result<Vec<T>, Self::ConnectionError>
+    where
+        T: for<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> + Send + Unpin; // Specific to PgRow for now
+
     // More specific methods could be added, e.g., for prepared statements,
     // transactions, or ORM-like operations if desired.
-    // async fn query_typed<T: FromRow>(&mut self, query: &str, params: &[&dyn ToSql]) -> Result<Vec<T>, Self::ConnectionError>;
     // async fn begin_transaction(&mut self) -> Result<(), Self::ConnectionError>;
     // async fn commit_transaction(&mut self) -> Result<(), Self::ConnectionError>;
     // async fn rollback_transaction(&mut self) -> Result<(), Self::ConnectionError>;

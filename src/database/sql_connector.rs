@@ -69,6 +69,16 @@ impl DbConnection for PostgresConnection {
         }
     }
 
+    async fn query_typed<T>(&mut self, query: &str) -> Result<Vec<T>, Self::ConnectionError>
+    where
+        T: for<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> + Send + Unpin,
+    {
+        sqlx::query_as::<_, T>(query)
+            .fetch_all(&mut self.conn)
+            .await
+            .map_err(PostgresConnectorError::Sqlx)
+    }
+
     async fn close(mut self) -> Result<(), Self::ConnectionError> {
         self.conn.close().await?;
         Ok(())
@@ -152,6 +162,7 @@ impl DbConnectionPool for PostgresPool {
 mod tests {
     use super::*;
     use crate::core::config::AppConfig; // Assuming AppConfig can provide DB URL
+    use crate::models::user::DbUser; // Import DbUser for typed queries
 
     // Note: These tests would ideally require a running PostgreSQL instance
     // or more sophisticated mocking if `sqlx::test` is not used.
@@ -216,8 +227,53 @@ mod tests {
             assert!(query_res.is_ok());
             if let Ok(res_str) = query_res {
                 // This check is very basic due to the generic QueryResult
-                assert!(res_str.contains("Query executed successfully")); 
+            assert!(res_str.contains("Query executed successfully")); 
             }
+            conn.close().await.expect("Failed to close connection");
+        }
+    }
+
+    #[tokio::test]
+    #[ignore] // Requires live DB and assumes table 'db_users' can be created/dropped
+    async fn test_postgres_query_typed() {
+        let db_url = get_test_db_url();
+        let connect_options = PgConnectOptions::from_str(&db_url)
+            .expect("Failed to parse DB URL for connect options");
+            
+        let conn_result = PostgresConnection::connect(connect_options).await;
+        assert!(conn_result.is_ok(), "Failed to connect for query_typed test: {:?}", conn_result.err());
+
+        if let Ok(mut conn) = conn_result {
+            // Setup: Ensure table exists and is empty
+            let _ = conn.execute_raw_query("DROP TABLE IF EXISTS db_users;").await; // Drop if exists
+            let create_res = conn.execute_raw_query(
+                "CREATE TABLE db_users (id SERIAL PRIMARY KEY, name TEXT NOT NULL, email TEXT);"
+            ).await;
+            assert!(create_res.is_ok(), "Failed to create db_users table: {:?}", create_res.err());
+
+            // Insert test data
+            let insert1_res = conn.execute_raw_query("INSERT INTO db_users (name, email) VALUES ('Alice', 'alice@example.com');").await;
+            assert!(insert1_res.is_ok());
+            let insert2_res = conn.execute_raw_query("INSERT INTO db_users (name) VALUES ('Bob');").await;
+            assert!(insert2_res.is_ok());
+
+            // Call query_typed
+            let users_result = conn.query_typed::<DbUser>("SELECT id, name, email FROM db_users ORDER BY name ASC;").await;
+            assert!(users_result.is_ok(), "query_typed failed: {:?}", users_result.err());
+
+            if let Ok(users) = users_result {
+                assert_eq!(users.len(), 2);
+                
+                assert_eq!(users[0].name, "Alice");
+                assert_eq!(users[0].email, Some("alice@example.com".to_string()));
+                
+                assert_eq!(users[1].name, "Bob");
+                assert_eq!(users[1].email, None);
+            }
+
+            // Teardown (optional, if tests run in isolated DBs/schemas)
+            // let _ = conn.execute_raw_query("DROP TABLE db_users;").await;
+
             conn.close().await.expect("Failed to close connection");
         }
     }

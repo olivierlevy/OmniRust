@@ -30,8 +30,10 @@ OmniRust offers a wide array of functionalities, including but not limited to:
     *   HTML Templating (e.g., using Askama - see `web::templating`)
     *   GraphQL API Server (`graphql` module)
     *   WebAssembly (Wasm) support (conceptual, see `web::wasm`)
-*   **Database Interaction**:
-    *   SQL connectors and traits (conceptual, see `database` module)
+*   **Database Interaction** (`database` module):
+    *   Generic traits for `DbConnection` and `DbConnectionPool`.
+    *   PostgreSQL connector (`sql_connector.rs`) implementing these traits using `sqlx`.
+    *   Support for raw SQL queries and typed queries (mapping rows to structs via `sqlx::FromRow`).
 *   **Concurrency Tools**:
     *   Schedulers, Worker Pools, Lock-Free data structures (conceptual, see `concurrency` module)
 *   **Caching**:
