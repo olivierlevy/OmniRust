@@ -31,6 +31,14 @@ pub struct PostgresConnection {
     conn: sqlx::PgConnection,
 }
 
+/// Represents a connection acquired from a `PostgresPool`.
+/// Implements the `DbConnection` trait.
+#[derive(Debug)]
+pub struct PostgresPooledConnection {
+    // sqlx::pool::PoolConnection<Postgres> automatically returns the connection to the pool when dropped.
+    conn: sqlx::pool::PoolConnection<Postgres>,
+}
+
 #[derive(Debug)]
 pub struct PostgresPool {
     pool: Pool<Postgres>,
@@ -59,10 +67,6 @@ impl DbConnection for PostgresConnection {
     }
 
     async fn execute_raw_query(&mut self, query: &str) -> QueryResult {
-        // sqlx's simple query returns a stream of Either<PgQueryResult, PgRow>
-        // For a generic QueryResult as String, we might try to fetch one row or summarize.
-        // This is a simplification. A real implementation would need more robust result handling.
-        // For now, let's try to execute and get rows affected or a simple message.
         match self.conn.execute(query).await {
             Ok(result) => Ok(format!("Query executed successfully. Rows affected: {}", result.rows_affected())),
             Err(e) => Err(Box::new(e) as Box<dyn std::error::Error + Send + Sync>),
@@ -95,7 +99,65 @@ impl DbConnection for PostgresConnection {
     }
 
     async fn close(mut self) -> Result<(), Self::ConnectionError> {
-        self.conn.close().await?;
+        self.conn.close().await?; // Closes the standalone connection
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl DbConnection for PostgresPooledConnection {
+    type Config = PgConnectOptions; // Not used for pooled connections directly via this trait
+    type ConnectionError = PostgresConnectorError;
+
+    async fn connect(_config: Self::Config) -> Result<Self, Self::ConnectionError> {
+        // This method should not be called directly on a PooledConnection.
+        // Connections are obtained from the pool.
+        Err(PostgresConnectorError::Config(
+            "Cannot call connect directly on a PooledConnection. Get it from a pool.".to_string()
+        ))
+    }
+
+    async fn execute_raw_query(&mut self, query: &str) -> QueryResult {
+        match self.conn.execute(query).await {
+            Ok(result) => Ok(format!("Query executed successfully. Rows affected: {}", result.rows_affected())),
+            Err(e) => Err(Box::new(e) as Box<dyn std::error::Error + Send + Sync>),
+        }
+    }
+
+    async fn query_typed<T>(&mut self, query: &str) -> Result<Vec<T>, Self::ConnectionError>
+    where
+        T: for<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> + Send + Unpin,
+    {
+        sqlx::query_as::<_, T>(query)
+            .fetch_all(&mut *self.conn) // Deref to get &mut PgConnection from &mut PoolConnection
+            .await
+            .map_err(PostgresConnectorError::Sqlx)
+    }
+
+    async fn begin_transaction(&mut self) -> Result<(), Self::ConnectionError> {
+        // sqlx::Transaction can be started from a &mut PoolConnection
+        // However, to keep the DbConnection trait simple (not returning a Transaction guard),
+        // we'll use raw SQL here too. This means the transaction is managed by the DB session,
+        // not by an explicit Transaction object in Rust.
+        self.conn.execute("BEGIN").await?;
+        Ok(())
+    }
+
+    async fn commit_transaction(&mut self) -> Result<(), Self::ConnectionError> {
+        self.conn.execute("COMMIT").await?;
+        Ok(())
+    }
+
+    async fn rollback_transaction(&mut self) -> Result<(), Self::ConnectionError> {
+        self.conn.execute("ROLLBACK").await?;
+        Ok(())
+    }
+
+    async fn close(self) -> Result<(), Self::ConnectionError> {
+        // For a pooled connection, `close` means returning it to the pool.
+        // `PoolConnection` does this on Drop. So, this can be a no-op or explicit drop.
+        // Explicitly dropping is fine.
+        drop(self.conn);
         Ok(())
     }
 }
@@ -103,11 +165,7 @@ impl DbConnection for PostgresConnection {
 
 #[async_trait]
 impl DbConnectionPool for PostgresPool {
-    type Connection = PostgresConnection; // This needs to be a type that implements DbConnection
-                                          // A direct PoolConnection<Postgres> would be better for DbConnection.
-                                          // Let's refine this. DbConnectionPool should return a wrapper
-                                          // around PoolConnection<Postgres> that implements DbConnection.
-
+    type Connection = PostgresPooledConnection; // Changed to PostgresPooledConnection
     type Config = PostgresConfig;
     type PoolError = PostgresConnectorError;
 
@@ -141,19 +199,8 @@ impl DbConnectionPool for PostgresPool {
     }
 
     async fn get_connection(&self) -> Result<Self::Connection, Self::PoolError> {
-        // This is where the design choice for PostgresConnection matters.
-        // If PostgresConnection is to be a true single connection, we'd get a
-        // PoolConnection<Postgres> and wrap it.
-        // For now, this is a conceptual placeholder.
-        // A proper implementation would be:
-        // let conn = self.pool.acquire().await?;
-        // Ok(PostgresPooledConnection { conn }) // Where PostgresPooledConnection implements DbConnection
-        
-        // Simplified: Re-parse options and connect. This is NOT how a pool.get_connection should work.
-        // This part needs significant refinement to correctly implement the DbConnection/DbConnectionPool pattern.
-        // The current PostgresConnection is for a standalone connection, not one from a pool.
-        // For a quick placeholder:
-        Err(PostgresConnectorError::Config("get_connection from pool not fully implemented for this PostgresConnection type".to_string()))
+        let conn = self.pool.acquire().await?;
+        Ok(PostgresPooledConnection { conn })
     }
 
     async fn close_pool(self) -> Result<(), Self::PoolError> {
@@ -349,5 +396,48 @@ mod tests {
             let _ = conn.execute_raw_query("DROP TABLE transaction_test_table;").await;
             conn.close().await.expect("Failed to close connection after rollback test");
         }
+    }
+
+    #[tokio::test]
+    #[ignore] // Requires live DB
+    async fn test_postgres_pool_get_connection_and_use() {
+        let db_url = get_test_db_url();
+        let config = PostgresConfig {
+            database_url: db_url,
+            max_connections: Some(2),
+            min_connections: Some(1),
+            connect_timeout_seconds: Some(5),
+            idle_timeout_seconds: Some(300),
+            max_lifetime_seconds: Some(1800),
+        };
+        let pool = PostgresPool::new_pool(config).await.expect("Failed to create pool for get_connection test");
+
+        { // Scope for the pooled connection
+            let conn_result = pool.get_connection().await;
+            assert!(conn_result.is_ok(), "Failed to get connection from pool: {:?}", conn_result.err());
+            if let Ok(mut pooled_conn) = conn_result {
+                // Setup: Ensure table exists and is empty
+                let _ = pooled_conn.execute_raw_query("DROP TABLE IF EXISTS pool_test_users;").await;
+                let create_res = pooled_conn.execute_raw_query(
+                    "CREATE TABLE pool_test_users (id SERIAL PRIMARY KEY, name TEXT NOT NULL, email TEXT);"
+                ).await;
+                assert!(create_res.is_ok(), "Failed to create pool_test_users table: {:?}", create_res.err());
+
+                let insert_res = pooled_conn.execute_raw_query("INSERT INTO pool_test_users (name, email) VALUES ('Pool User', 'pool@example.com');").await;
+                assert!(insert_res.is_ok());
+
+                let users_result = pooled_conn.query_typed::<DbUser>("SELECT id, name, email FROM pool_test_users WHERE name = 'Pool User';").await;
+                assert!(users_result.is_ok(), "query_typed on pooled connection failed: {:?}", users_result.err());
+                
+                if let Ok(users) = users_result {
+                    assert_eq!(users.len(), 1);
+                    assert_eq!(users[0].name, "Pool User");
+                }
+                // Connection is returned to pool when pooled_conn is dropped here (at end of scope)
+                // Or by calling pooled_conn.close().await;
+            }
+        } // pooled_conn is dropped here
+
+        pool.close_pool().await.expect("Failed to close pool");
     }
 }
