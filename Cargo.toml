@@ -1,3 +1,10 @@
+[workspace]
+members = [
+    ".", # The root package (omnirust library)
+    "sample", # The sample application
+]
+resolver = "2" # Recommended for workspaces
+
 [package]
 name = "omnirust"
 version = "0.1.0"
