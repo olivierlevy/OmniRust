@@ -2,7 +2,7 @@
 
 use crate::database::traits::{DbConnection, DbConnectionPool, QueryResult};
 use async_trait::async_trait;
-use sqlx::postgres::{PgPoolOptions, PgConnectOptions, PgRow};
+use sqlx::postgres::{PgPoolOptions, PgConnectOptions}; // Removed PgRow
 use sqlx::{Pool, Postgres, Error as SqlxError, Connection as _, Executor as _}; // Renamed Connection to avoid conflict
 use std::time::Duration;
 use std::str::FromStr;
@@ -87,12 +87,12 @@ impl DbConnectionPool for PostgresPool {
     type PoolError = PostgresConnectorError;
 
     async fn new_pool(config: Self::Config) -> Result<Self, Self::PoolError> {
-        let mut connect_options = PgConnectOptions::from_str(&config.database_url)
+        let connect_options = PgConnectOptions::from_str(&config.database_url)
             .map_err(|e| PostgresConnectorError::UrlParse(e.to_string()))?; // Convert sqlx::Error to our error
 
-        if let Some(timeout) = config.connect_timeout_seconds {
-            connect_options = connect_options.connect_timeout(Duration::from_secs(timeout));
-        }
+        // Note: PgConnectOptions itself doesn't have a direct connect_timeout method.
+        // It's typically part of the DSN string or handled by the pool.
+        // The pool's acquire_timeout is more relevant here.
         
         let mut pool_options = PgPoolOptions::new();
         if let Some(max_conn) = config.max_connections {

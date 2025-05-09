@@ -45,7 +45,7 @@ pub fn add_template_routes(router: Router) -> Router {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::body::Body;
+    use axum::body::{Body, to_bytes}; // Import axum::body::to_bytes
     use axum::http::{Request, StatusCode};
     use tower::ServiceExt; // for `oneshot`
 
@@ -59,7 +59,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
-        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap(); // Use axum::body::to_bytes
         let body_str = String::from_utf8(body.to_vec()).unwrap();
 
         // Check for key parts of the rendered template

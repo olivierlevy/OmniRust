@@ -1,8 +1,8 @@
 // src/streaming/processor.rs
 
 use async_trait::async_trait;
-use futures_core::stream::Stream;
-use futures_util::stream::{StreamExt, BoxStream}; // For BoxStream to erase type
+use futures_util::stream::Stream; // Corrected import
+use futures_util::stream::StreamExt;
 use std::pin::Pin;
 
 /// A trait for asynchronous stream processors.
@@ -17,8 +17,8 @@ pub trait StreamProcessor<In, Out>: Send + Sync {
 pub struct MapProcessor<F, In, Out>
 where
     F: Fn(In) -> Out + Send + Sync + Copy + 'static, // 'static because it's stored in the struct
-    In: Send + 'static,
-    Out: Send + 'static,
+    In: Send + Sync + 'static, // Added Sync
+    Out: Send + Sync + 'static, // Added Sync
 {
     map_fn: F,
     _phantom_in: std::marker::PhantomData<In>,
@@ -28,8 +28,8 @@ where
 impl<F, In, Out> MapProcessor<F, In, Out>
 where
     F: Fn(In) -> Out + Send + Sync + Copy + 'static,
-    In: Send + 'static,
-    Out: Send + 'static,
+    In: Send + Sync + 'static, // Added Sync
+    Out: Send + Sync + 'static, // Added Sync
 {
     pub fn new(map_fn: F) -> Self {
         MapProcessor {
@@ -44,8 +44,8 @@ where
 impl<F, In, Out> StreamProcessor<In, Out> for MapProcessor<F, In, Out>
 where
     F: Fn(In) -> Out + Send + Sync + Copy + 'static,
-    In: Send + 'static,
-    Out: Send + 'static,
+    In: Send + Sync + 'static, // Added Sync
+    Out: Send + Sync + 'static, // Added Sync
 {
     async fn process<'a>(&'a self, input: Pin<Box<dyn Stream<Item = In> + Send + 'a>>) -> Pin<Box<dyn Stream<Item = Out> + Send + 'a>> {
         let map_fn = self.map_fn; // Copy map_fn to be moved into the async block
@@ -57,7 +57,7 @@ where
 pub struct FilterProcessor<P, Item>
 where
     P: Fn(&Item) -> bool + Send + Sync + Copy + 'static,
-    Item: Send + 'static,
+    Item: Send + Sync + Clone + 'static, // Added Clone
 {
     predicate: P,
     _phantom_item: std::marker::PhantomData<Item>,
@@ -66,7 +66,7 @@ where
 impl<P, Item> FilterProcessor<P, Item>
 where
     P: Fn(&Item) -> bool + Send + Sync + Copy + 'static,
-    Item: Send + 'static,
+    Item: Send + Sync + Clone + 'static, // Added Clone
 {
     pub fn new(predicate: P) -> Self {
         FilterProcessor {
@@ -80,11 +80,24 @@ where
 impl<P, Item> StreamProcessor<Item, Item> for FilterProcessor<P, Item>
 where
     P: Fn(&Item) -> bool + Send + Sync + Copy + 'static,
-    Item: Send + 'static,
+    Item: Send + Sync + Clone + 'static, 
 {
     async fn process<'a>(&'a self, input: Pin<Box<dyn Stream<Item = Item> + Send + 'a>>) -> Pin<Box<dyn Stream<Item = Item> + Send + 'a>> {
-        let predicate = self.predicate; // Copy predicate
-        Box::pin(input.filter(move |item| predicate(item)))
+        let predicate_fn = self.predicate; 
+        Box::pin(input.filter(move |item: &Item| {
+            // Clone the item to ensure the async block owns its data if needed,
+            // or if the predicate needs an owned item.
+            // However, the predicate P takes &Item.
+            // The issue is the lifetime of the reference `item` passed to the closure
+            // versus the lifetime of the Future returned by the closure.
+            // The `async move` block captures `item` by reference if not explicitly moved.
+            // Let's ensure predicate_fn is called with a reference that lives long enough.
+            // The item reference from filter is valid for the call to the closure.
+            // The async block needs to ensure its captures are valid.
+            let p = predicate_fn; // predicate_fn is Copy
+            let i = item.clone(); // item is cloned, so `i` is owned by the async block
+            async move { p(&i) } // p operates on a reference to the owned `i`
+        }))
     }
 }
 

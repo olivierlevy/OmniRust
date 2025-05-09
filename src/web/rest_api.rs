@@ -1,13 +1,14 @@
 // src/web/rest_api.rs
 
 use axum::{
-    routing::{get, post},
+    routing::get, // Removed post
     http::StatusCode,
     response::IntoResponse,
-    Json, Router, Server,
+    Json, Router,
 };
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
+use tokio::net::TcpListener; // Added for Axum 0.7 server
 use tokio::signal; // For graceful shutdown
 
 // Example User struct for request/response
@@ -64,12 +65,12 @@ pub fn app_router() -> Router {
 pub async fn start_rest_server(addr_str: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let addr: SocketAddr = addr_str.parse()?;
     
-    omnirust::core::init_logger::log_info(&format!("REST API server listening on {}", addr));
+    crate::core::init_logger::log_info(&format!("REST API server listening on {}", addr));
 
     let router = app_router();
-
-    Server::bind(&addr)
-        .serve(router.into_make_service())
+    
+    let listener = TcpListener::bind(addr).await?;
+    axum::serve(listener, router.into_make_service())
         .with_graceful_shutdown(shutdown_signal())
         .await?;
 
@@ -96,8 +97,8 @@ async fn shutdown_signal() {
     let terminate = std::future::pending::<()>(); // On non-Unix, just wait for Ctrl+C
 
     tokio::select! {
-        _ = ctrl_c => {omnirust::core::init_logger::log_info("Received Ctrl+C, shutting down REST server...");},
-        _ = terminate => {omnirust::core::init_logger::log_info("Received terminate signal, shutting down REST server...");},
+        _ = ctrl_c => {crate::core::init_logger::log_info("Received Ctrl+C, shutting down REST server...");},
+        _ = terminate => {crate::core::init_logger::log_info("Received terminate signal, shutting down REST server...");},
     }
 }
 
@@ -105,7 +106,7 @@ async fn shutdown_signal() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::body::Body;
+    use axum::body::{Body, to_bytes}; // Import axum::body::to_bytes
     use axum::http::{Request, StatusCode};
     use tower::ServiceExt; // for `oneshot` and `ready`
 
@@ -119,7 +120,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
-        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap(); // Use axum::body::to_bytes
         assert_eq!(&body[..], b"Hello, OmniRust REST API!");
     }
 
@@ -146,7 +147,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(response_create.status(), StatusCode::CREATED);
-        let body_create = hyper::body::to_bytes(response_create.into_body()).await.unwrap();
+        let body_create = to_bytes(response_create.into_body(), usize::MAX).await.unwrap(); // Use axum::body::to_bytes
         let created_user: User = serde_json::from_slice(&body_create).unwrap();
         assert_eq!(created_user.username, "testuser");
         assert_ne!(created_user.id, 0); // ID should be assigned by server
@@ -158,7 +159,7 @@ mod tests {
             .unwrap();
         
         assert_eq!(response_get.status(), StatusCode::OK);
-        let body_get = hyper::body::to_bytes(response_get.into_body()).await.unwrap();
+        let body_get = to_bytes(response_get.into_body(), usize::MAX).await.unwrap(); // Use axum::body::to_bytes
         let users: Vec<User> = serde_json::from_slice(&body_get).unwrap();
         
         assert_eq!(users.len(), 1);

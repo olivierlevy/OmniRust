@@ -1,7 +1,7 @@
 // src/data_structures/graph.rs
 
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::hash::Hash;
+// use std::hash::Hash; // Unused
 use std::fmt::Debug;
 use std::marker::PhantomData;
 

@@ -12,6 +12,7 @@ enum Message {
     Terminate,
 }
 
+#[derive(Debug)] // Added Debug derive
 struct Worker {
     id: usize,
     thread: Option<thread::JoinHandle<()>>,
