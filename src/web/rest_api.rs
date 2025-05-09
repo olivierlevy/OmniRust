@@ -8,15 +8,23 @@ use axum::{
     middleware, // Added for middleware
 };
 use serde::{Deserialize, Serialize};
+use validator::{Validate, ValidationError, ValidationErrors}; // Added for input validation
 use crate::web::auth::token_auth_middleware; // Import the auth middleware
 use std::net::SocketAddr;
 use tokio::net::TcpListener; // Added for Axum 0.7 server
 use tokio::signal; // For graceful shutdown
 
-// Example User struct for request/response
+// Example User struct for response and "database" storage
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct User {
     id: u64,
+    username: String,
+}
+
+/// Payload for creating a new user, with validation rules.
+#[derive(Deserialize, Debug, Validate)]
+struct CreateUserPayload {
+    #[validate(length(min = 1, message = "Username cannot be empty"))]
     username: String,
 }
 
@@ -32,16 +40,36 @@ async fn get_users() -> impl IntoResponse {
 }
 
 /// Handler for POST /users
-async fn create_user(Json(payload): Json<User>) -> impl IntoResponse {
+async fn create_user(Json(payload): Json<CreateUserPayload>) -> Result<impl IntoResponse, (StatusCode, String)> {
+    // Validate the payload
+    if let Err(validation_errors) = payload.validate() {
+        // Construct a user-friendly error message
+        // In a real app, you might format this more nicely or return structured errors.
+        let error_messages = validation_errors
+            .field_errors()
+            .iter()
+            .map(|(field, errors)| {
+                let messages = errors
+                    .iter()
+                    .map(|e| e.message.as_ref().map(|s| s.to_string()).unwrap_or_else(|| e.code.to_string()))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("{}: {}", field, messages)
+            })
+            .collect::<Vec<_>>()
+            .join("; ");
+        return Err((StatusCode::BAD_REQUEST, format!("Input validation failed: {}", error_messages)));
+    }
+
     let mut users = USERS_DB.lock().unwrap();
     // Simple ID generation for example purposes
     let new_id = users.len() as u64 + 1;
     let user = User {
         id: new_id,
-        username: payload.username,
+        username: payload.username, // Use validated username
     };
     users.push(user.clone());
-    (StatusCode::CREATED, Json(user))
+    Ok((StatusCode::CREATED, Json(user)))
 }
 
 /// Handler for GET /hello
@@ -141,7 +169,7 @@ mod tests {
         let app = app_router();
 
         // Create a user
-        let new_user_payload = User { id: 0, username: "testuser".to_string() }; // ID is ignored by create_user
+        let valid_payload = serde_json::json!({ "username": "testuser" });
         let response_create = app
             .clone() // Clone router for multiple requests
             .oneshot(
@@ -149,7 +177,7 @@ mod tests {
                     .method("POST")
                     .uri("/users")
                     .header("content-type", "application/json")
-                    .body(Body::from(serde_json::to_string(&new_user_payload).unwrap()))
+                    .body(Body::from(valid_payload.to_string()))
                     .unwrap(),
             )
             .await
@@ -244,5 +272,34 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_create_user_invalid_payload() {
+        let app = app_router();
+
+        // Test with empty username
+        let invalid_payload = serde_json::json!({ "username": "" });
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/users")
+                    .header("content-type", "application/json")
+                    .body(Body::from(invalid_payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let error_message: String = String::from_utf8_lossy(&body).into();
+        assert!(error_message.contains("Input validation failed: username: Username cannot be empty"));
+
+        // Test with missing username (should also fail deserialization or validation if username is not Option<String>)
+        // Depending on Serde's default behavior for missing fields, this might be a different error.
+        // If username were Option<String> and validated with `#[validate(required)]`, this would be more relevant.
+        // For now, an empty string covers the current validation rule.
     }
 }

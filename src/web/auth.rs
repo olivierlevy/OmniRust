@@ -10,7 +10,7 @@ use axum::{
 // For this basic example, the token is hardcoded.
 // In a real application, this would come from config or a secure store,
 // and you'd likely use JWTs or a similar mechanism.
-const EXPECTED_AUTH_TOKEN: &str = "omnirust-secure-token-123";
+pub const EXPECTED_AUTH_TOKEN: &str = "omnirust-secure-token-123"; // Made public for tests
 
 /// Middleware for simple bearer token authentication.
 pub async fn token_auth_middleware(

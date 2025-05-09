@@ -29,6 +29,7 @@ OmniRust offers a wide array of functionalities, including but not limited to:
     *   REST API framework (using Axum in `web::rest_api`):
         *   Example routes for basic CRUD operations.
         *   Basic token-based authentication middleware (`web::auth`).
+        *   Input validation for request payloads (using `validator` crate).
     *   HTML Templating (using Askama in `web::templating`).
     *   GraphQL API Server (`graphql` module).
     *   WebAssembly (Wasm) support (conceptual in `web::wasm`).
