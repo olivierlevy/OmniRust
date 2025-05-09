@@ -5,14 +5,18 @@ use omnirust_sample_app::showcase_data_structures;
 use omnirust_sample_app::showcase_cli;
 use omnirust_sample_app::showcase_networking;
 
-use omnirust::core::init_logger::{init_logger, log_info};
+use omnirust::logging::logger::init_logger; // Updated logger import
+use omnirust::core::config::AppConfig;    // For loading config
 use anyhow::Result;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Initialize logger from OmniRust
-    init_logger();
-    log_info("OmniRust Sample Application - Starting");
+    // Load configuration
+    let config = AppConfig::load().expect("Failed to load AppConfig for sample app");
+
+    // Initialize logger from OmniRust using the loaded configuration
+    init_logger(&config).expect("Failed to initialize logger for sample app");
+    tracing::info!("OmniRust Sample Application - Starting"); // Use tracing macro
 
     // --- 1. Core: Configuration Loading ---
     showcase_core::run_core_showcase();
@@ -22,6 +26,7 @@ async fn main() -> Result<()> {
 
     // --- 3. Data Structures ---
     showcase_data_structures::run_data_structures_showcase();
+    showcase_data_structures::run_priority_queue_showcase(); // Added PriorityQueue showcase
     
     // --- 4. CLI Argument Parsing ---
     showcase_cli::run_cli_showcase();
@@ -46,7 +51,7 @@ async fn main() -> Result<()> {
     println!("    Plugins: (See omnirust::plugins for placeholder)");
 
 
-    log_info("OmniRust Sample Application - Finished");
+    tracing::info!("OmniRust Sample Application - Finished"); // Use tracing macro
     println!("\nOmniRust Sample Application Finished.");
     Ok(())
 }

@@ -29,12 +29,12 @@ pub async fn start_server(_schema: Schema<QueryRoot, MutationRoot, SubscriptionR
         .layer(Extension(_schema)); // Pass the schema as an extension
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 8000)); // Or from config
-    crate::core::init_logger::log_info(&format!("GraphQL server playground available at http://{}/graphql", addr));
+    tracing::info!("GraphQL server playground available at http://{}/graphql", addr);
     
     Server::bind(&addr)
         .serve(app.into_make_service())
         .await?;
     */
-    crate::core::init_logger::log_info("GraphQL server start_server called (dummy implementation).");
+    tracing::info!("GraphQL server start_server called (dummy implementation).");
     Ok(())
 }

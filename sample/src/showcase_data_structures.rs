@@ -1,4 +1,4 @@
-use omnirust::data_structures::{tree::Tree, graph::Graph, circular_buffer::CircularBuffer};
+use omnirust::data_structures::{tree::Tree, graph::Graph, circular_buffer::CircularBuffer, priority_queue::PriorityQueue};
 
 pub fn run_data_structures_showcase() {
     println!("\n--- Data Structures Showcase ---");
@@ -37,4 +37,30 @@ pub fn run_data_structures_showcase() {
     println!("    Pushed 4 (overwrite): {:?}", c_buffer.iter().collect::<Vec<_>>()); // [2, 3, 4]
     println!("    Popped: {:?}", c_buffer.pop_front()); // Some(2)
     println!("    Buffer after pop: {:?}", c_buffer.iter().collect::<Vec<_>>()); // [3, 4]
+}
+
+// Removed redundant import
+
+pub fn run_priority_queue_showcase() {
+    println!("\n  Priority Queue Example:");
+    let mut pq = PriorityQueue::new();
+    pq.push("Task A (Prio 2)", 2);
+    pq.push("Task B (Prio 1)", 1);
+    pq.push("Task C (Prio 3)", 3);
+
+    println!("    Initial queue (highest prio first):");
+    while let Some(task) = pq.pop() {
+        println!("      - Popped: {}", task);
+    }
+
+    pq.push("Task D (Prio 5)", 5);
+    pq.push("Task E (Prio 5)", 5); // Same priority
+    pq.push("Task F (Prio 0)", 0);
+    println!("    Peek before pop: {:?}", pq.peek());
+    println!("    Queue length: {}", pq.len());
+    println!("    Popping again:");
+    while let Some(task) = pq.pop() {
+        println!("      - Popped: {}", task);
+    }
+    println!("    Is empty: {}", pq.is_empty());
 }

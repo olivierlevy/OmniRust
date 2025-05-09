@@ -7,17 +7,19 @@ OmniRust is a comprehensive, modular, and scalable Rust framework designed to ac
 OmniRust offers a wide array of functionalities, including but not limited to:
 
 *   **Core Services**:
-    *   Configuration Management (`core::config`)
-    *   Asynchronous Logging (`core::init_logger`)
+*   Configuration Management (`core::config`): Supports TOML, YAML, and JSON files, and environment variables.
+*   Advanced Logging (`logging::logger`): Uses `tracing` for structured, configurable logging.
+*   Custom Error Handling (`core::errors`): Centralized `OmniRustError` type.
 *   **Utility Libraries**:
-    *   String manipulation (`utils::string_utils`)
-    *   File operations (`utils::file_utils`)
+*   String manipulation (`utils::string_utils`)
+*   Asynchronous File operations (`utils::file_utils`) using `tokio::fs`.
     *   Date and time handling (`utils::datetime_utils`)
     *   JSON, TOML, and YAML parsing/serialization (`utils::json_utils`, `utils::toml_utils`, `utils::yaml_utils`)
 *   **Data Structures**:
     *   Tree (`data_structures::tree`)
     *   Graph (`data_structures::graph`)
     *   Circular Buffer (`data_structures::circular_buffer`)
+    *   Priority Queue (`data_structures::priority_queue`)
 *   **Command-Line Interface (CLI)** (`cli` module):
     *   Argument parsing (`cli::arg_parser`) using `clap`.
     *   Basic TUI (Terminal User Interface) example: a counter application (`cli::tui_components`) using `ratatui` and `crossterm`.
@@ -221,6 +223,121 @@ The sample application's `main.rs` (`sample/src/main.rs`) is organized into modu
 *   `showcase_cli.rs`: Provides a conceptual example of how OmniRust's CLI argument parser can be used.
 *   `showcase_networking.rs`: Demonstrates making an HTTP GET request using OmniRust's HTTP client.
 
+## User Guide
+
+This section provides a brief guide on how to use some of the key features and recent improvements in OmniRust.
+
+### Configuration
+
+OmniRust's configuration is managed by the `core::config` module. You can configure the application using TOML, YAML, or JSON files, or by setting environment variables.
+
+**Configuration Files:**
+
+Create a `config.toml`, `config.yaml`, or `config.json` file in the root of your project (or the directory where the application binary is run).
+
+Example `config.toml`:
+```toml
+database_url = "postgres://user:pass@host/db"
+log_level = "debug" # Can be trace, debug, info, warn, error
+```
+
+Example `config.yaml`:
+```yaml
+database_url: "postgres://user:pass@host/db"
+log_level: "debug"
+```
+
+Example `config.json`:
+```json
+{
+  "database_url": "postgres://user:pass@host/db",
+  "log_level": "debug"
+}
+```
+
+**Environment Variables:**
+
+Override file configurations using environment variables prefixed with `APP_`. For nested keys, use `_`.
+
+```sh
+export APP_DATABASE_URL="postgres://another_user:another_pass@another_host/another_db"
+export APP_LOG_LEVEL="trace"
+```
+
+The application will load these in the order: `config.toml`, `config.yaml`, `config.json`, then environment variables (with later sources overriding earlier ones).
+
+### Logging
+
+Logging is handled by the `tracing` crate, configured via `logging::logger`. The log level is set by the `log_level` field in the configuration (see above) or the `RUST_LOG` environment variable.
+
+Logs include timestamps, level, source file, line number, and thread ID.
+
+Example usage in your code:
+```rust
+use tracing::{info, warn, error, debug, trace};
+
+fn my_function() {
+    trace!("This is a detailed trace message.");
+    debug!("Debugging information for my_function.");
+    info!("my_function executed successfully.");
+    warn!("Something looks a bit off here.");
+    error!("A critical error occurred in my_function!");
+}
+```
+
+### Priority Queue
+
+The `data_structures::priority_queue::PriorityQueue` provides a generic priority queue.
+
+```rust
+use omnirust::data_structures::priority_queue::PriorityQueue;
+
+let mut pq = PriorityQueue::new();
+pq.push("Urgent Task", 10);
+pq.push("Normal Task", 5);
+pq.push("Low Prio Task", 1);
+
+assert_eq!(pq.pop(), Some("Urgent Task"));
+```
+
+### Error Handling
+
+The framework uses a custom `OmniRustError` enum defined in `core::errors`. This allows for consistent error handling. Many utility functions and core components will return `Result<T, OmniRustError>`.
+
+```rust
+use omnirust::core::errors::OmniRustError;
+use omnirust::utils::file_utils::read_to_string; // Example async function
+
+async fn process_file(path: &str) -> Result<String, OmniRustError> {
+    let content = read_to_string(path).await?;
+    // ... process content
+    Ok(content)
+}
+```
+
+### Asynchronous File Utilities
+
+The `utils::file_utils` module provides asynchronous versions of common file operations.
+
+```rust
+use omnirust::utils::file_utils::{read_to_string, write_string_to_file, path_exists};
+use omnirust::core::errors::OmniRustError;
+
+#[tokio::main]
+async fn main() -> Result<(), OmniRustError> {
+    let file_path = "my_async_file.txt";
+    let content = "Hello from async OmniRust!";
+
+    write_string_to_file(file_path, content).await?;
+    assert!(path_exists(file_path).await);
+
+    let read_content = read_to_string(file_path).await?;
+    assert_eq!(read_content, content);
+
+    tokio::fs::remove_file(file_path).await?; // Clean up
+    Ok(())
+}
+```
 The output of the sample application will display the results of these showcases in the console.
 
 ## Key Dependencies

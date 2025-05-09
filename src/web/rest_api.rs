@@ -107,7 +107,7 @@ pub fn app_router() -> Router {
 pub async fn start_rest_server(addr_str: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let addr: SocketAddr = addr_str.parse()?;
     
-    crate::core::init_logger::log_info(&format!("REST API server listening on {}", addr));
+    tracing::info!("REST API server listening on {}", addr);
 
     let router = app_router();
     
@@ -139,8 +139,8 @@ async fn shutdown_signal() {
     let terminate = std::future::pending::<()>(); // On non-Unix, just wait for Ctrl+C
 
     tokio::select! {
-        _ = ctrl_c => {crate::core::init_logger::log_info("Received Ctrl+C, shutting down REST server...");},
-        _ = terminate => {crate::core::init_logger::log_info("Received terminate signal, shutting down REST server...");},
+        _ = ctrl_c => {tracing::info!("Received Ctrl+C, shutting down REST server...");},
+        _ = terminate => {tracing::info!("Received terminate signal, shutting down REST server...");},
     }
 }
 

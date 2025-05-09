@@ -1,6 +1,7 @@
 // Use the omnirust library crate
-use omnirust::core::init_logger::{init_logger, log_info, log_error};
+use omnirust::logging::logger::init_logger;
 use omnirust::core::config::AppConfig;
+use omnirust::core::errors::OmniRustError;
 // NOTE: The following block was duplicated by the previous tool use and is now corrected.
 use omnirust::graphql;
 use omnirust::graphql::schema::{QueryRoot, MutationRoot, SubscriptionRoot};
@@ -15,9 +16,12 @@ use std::error::Error;
 use tokio_tungstenite::accept_async;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> Result<(), OmniRustError> {
+    // Load configuration first
+    let config = AppConfig::load()?;
+
     // Initialize logger early, as it might be used by arg parsing or config loading.
-    init_logger();
+    init_logger(&config)?;
 
     // Parse CLI arguments
     let cli_args = arg_parser::parse_args();
@@ -47,9 +51,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 }
             }
             Commands::TuiCounter => {
-                log_info("Launching TUI Counter application...");
+                tracing::info!("Launching TUI Counter application...");
                 if let Err(e) = tui_components::run_counter_tui_app() {
-                    log_error(&format!("TUI application error: {}", e));
+                    tracing::error!("TUI application error: {}", e);
                     // Depending on desired behavior, you might want to return an error code
                     // For now, just log and exit gracefully.
                 }
@@ -59,11 +63,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // If no specific CLI command was handled, proceed with default server startup
-    log_info("No specific CLI command given, starting default servers...");
+    tracing::info!("No specific CLI command given, starting default servers...");
 
-    let config = AppConfig::load()?;
-    log_info(&format!("Database URL: {}", config.database_url));
-    log_info(&format!("Log Level: {}", config.log_level));
+    // The config is already loaded, no need to load again
+    // log_info(&format!("Database URL: {}", config.database_url)); // Use tracing macros directly
+    // log_info(&format!("Log Level: {}", config.log_level)); // Use tracing macros directly
 
     // Instantiate QueryRoot (now an empty struct) and MutationRoot
     let query_root = QueryRoot {}; 
@@ -76,7 +80,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let gql_schema = schema.clone(); // Clone schema for the GraphQL server
     tokio::spawn(async move {
         if let Err(e) = graphql::server::start_server(gql_schema).await {
-            log_error(&format!("Error starting GraphQL server: {}", e));
+            tracing::error!("Error starting GraphQL server: {}", e);
         }
     });
     
@@ -84,13 +88,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // You might want to make the address configurable
     // tokio::spawn(async {
     //     if let Err(e) = omnirust::web::rest_api::start_rest_server("127.0.0.1:3000").await {
-    //         log_error(&format!("Error starting REST API server: {}", e));
+    //         tracing::error!("Error starting REST API server: {}", e);
     //     }
     // });
 
     // Start WebSocket server
     let ws_listener = TcpListener::bind("127.0.0.1:8080").await?;
-    log_info("WebSocket server started at ws://127.0.0.1:8080");
+    tracing::info!("WebSocket server started at ws://127.0.0.1:8080");
 
     loop {
         match ws_listener.accept().await {
@@ -99,15 +103,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     match accept_async(stream).await {
                         Ok(ws_stream) => {
                             if let Err(e) = websocket_server::handle_connection(ws_stream).await {
-                                log_error(&format!("Error handling WebSocket connection: {}", e));
+                                tracing::error!("Error handling WebSocket connection: {}", e);
                             }
                         },
-                        Err(e) => log_error(&format!("Error accepting WebSocket connection: {}", e)),
+                        Err(e) => tracing::error!("Error accepting WebSocket connection: {}", e),
                     }
                 });
             }
             Err(e) => {
-                log_error(&format!("Failed to accept WebSocket client: {}", e));
+                tracing::error!("Failed to accept WebSocket client: {}", e);
                 // Consider if the loop should break or continue on accept errors
             }
         }
