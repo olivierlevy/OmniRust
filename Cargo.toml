@@ -20,6 +20,13 @@ toml = "0.8"
 serde_yaml = "0.9"
 reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
 url = "2.5"
+tonic = "0.13.1"
+prost = "0.13.5"
+prost-types = "0.13.5"
+futures-util = "0.3" # For StreamExt, SinkExt
+
+[build-dependencies]
+# tonic-build and prost-build removed as build.rs is minimal
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
