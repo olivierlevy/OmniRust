@@ -42,8 +42,10 @@ OmniRust offers a wide array of functionalities, including but not limited to:
     *   Schedulers, Worker Pools, Lock-Free data structures (conceptual, see `concurrency` module)
 *   **Caching**:
     *   Flexible caching mechanisms (`caching` module)
-*   **Machine Learning**:
-    *   Matrix operations, algorithms, integrations (conceptual, see `ml` module)
+*   **Machine Learning** (`ml` module):
+    *   Matrix operations (`ml::matrix`) using `ndarray`.
+    *   Basic Linear Regression algorithm (`ml::algorithms::linear_regression`).
+    *   Placeholders for further algorithms and integrations with external ML libraries.
 *   **Plugin System**:
     *   Support for dynamic plugin loading (conceptual, see `plugins` module)
 
