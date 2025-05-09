@@ -34,6 +34,7 @@ OmniRust offers a wide array of functionalities, including but not limited to:
     *   Generic traits for `DbConnection` and `DbConnectionPool`.
     *   PostgreSQL connector (`sql_connector.rs`) implementing these traits using `sqlx`.
     *   Support for raw SQL queries and typed queries (mapping rows to structs via `sqlx::FromRow`).
+    *   Basic transaction management (BEGIN, COMMIT, ROLLBACK).
 *   **Concurrency Tools**:
     *   Schedulers, Worker Pools, Lock-Free data structures (conceptual, see `concurrency` module)
 *   **Caching**:

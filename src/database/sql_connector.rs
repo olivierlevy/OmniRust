@@ -79,6 +79,21 @@ impl DbConnection for PostgresConnection {
             .map_err(PostgresConnectorError::Sqlx)
     }
 
+    async fn begin_transaction(&mut self) -> Result<(), Self::ConnectionError> {
+        self.conn.execute("BEGIN").await?;
+        Ok(())
+    }
+
+    async fn commit_transaction(&mut self) -> Result<(), Self::ConnectionError> {
+        self.conn.execute("COMMIT").await?;
+        Ok(())
+    }
+
+    async fn rollback_transaction(&mut self) -> Result<(), Self::ConnectionError> {
+        self.conn.execute("ROLLBACK").await?;
+        Ok(())
+    }
+
     async fn close(mut self) -> Result<(), Self::ConnectionError> {
         self.conn.close().await?;
         Ok(())
@@ -275,6 +290,64 @@ mod tests {
             // let _ = conn.execute_raw_query("DROP TABLE db_users;").await;
 
             conn.close().await.expect("Failed to close connection");
+        }
+    }
+
+    #[tokio::test]
+    #[ignore] // Requires live DB
+    async fn test_postgres_transaction_commit_and_rollback() {
+        let db_url = get_test_db_url();
+        let connect_options = PgConnectOptions::from_str(&db_url)
+            .expect("Failed to parse DB URL for connect options");
+
+        // Test Commit
+        {
+            let mut conn = PostgresConnection::connect(connect_options.clone()).await.expect("Failed to connect for commit test");
+            
+            // Setup table
+            let _ = conn.execute_raw_query("DROP TABLE IF EXISTS transaction_test_table;").await;
+            let create_res = conn.execute_raw_query("CREATE TABLE transaction_test_table (id INT PRIMARY KEY, name TEXT);").await;
+            assert!(create_res.is_ok(), "Failed to create transaction_test_table: {:?}", create_res.err());
+
+            conn.begin_transaction().await.expect("Failed to begin transaction for commit");
+            let insert_res = conn.execute_raw_query("INSERT INTO transaction_test_table (id, name) VALUES (1, 'Commit Test');").await;
+            assert!(insert_res.is_ok(), "Insert failed within transaction: {:?}", insert_res.err());
+            conn.commit_transaction().await.expect("Failed to commit transaction");
+
+            // Verify data is present after commit
+            let users_result = conn.query_typed::<DbUser>("SELECT id, name, NULL as email FROM transaction_test_table WHERE id = 1;").await;
+            assert!(users_result.is_ok(), "Query after commit failed: {:?}", users_result.err());
+            let users = users_result.unwrap();
+            assert_eq!(users.len(), 1);
+            assert_eq!(users[0].name, "Commit Test");
+            
+            conn.close().await.expect("Failed to close connection after commit test");
+        }
+
+        // Test Rollback
+        {
+            let mut conn = PostgresConnection::connect(connect_options.clone()).await.expect("Failed to connect for rollback test");
+            // Table should still exist with data from commit test
+            
+            conn.begin_transaction().await.expect("Failed to begin transaction for rollback");
+            let insert_res = conn.execute_raw_query("INSERT INTO transaction_test_table (id, name) VALUES (2, 'Rollback Test');").await;
+            assert!(insert_res.is_ok(), "Insert failed within transaction: {:?}", insert_res.err());
+            conn.rollback_transaction().await.expect("Failed to rollback transaction");
+
+            // Verify data with id=2 is NOT present after rollback
+            let users_result = conn.query_typed::<DbUser>("SELECT id, name, NULL as email FROM transaction_test_table WHERE id = 2;").await;
+            assert!(users_result.is_ok(), "Query after rollback failed: {:?}", users_result.err());
+            let users = users_result.unwrap();
+            assert!(users.is_empty(), "Data from rolled-back transaction should not be present.");
+
+            // Verify original data (id=1) is still there
+            let original_data_result = conn.query_typed::<DbUser>("SELECT id, name, NULL as email FROM transaction_test_table WHERE id = 1;").await;
+            assert!(original_data_result.is_ok());
+            assert_eq!(original_data_result.unwrap().len(), 1, "Original committed data should still exist.");
+
+            // Cleanup
+            let _ = conn.execute_raw_query("DROP TABLE transaction_test_table;").await;
+            conn.close().await.expect("Failed to close connection after rollback test");
         }
     }
 }

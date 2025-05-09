@@ -34,11 +34,14 @@ pub trait DbConnection: Send + Sync {
     where
         T: for<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> + Send + Unpin; // Specific to PgRow for now
 
-    // More specific methods could be added, e.g., for prepared statements,
-    // transactions, or ORM-like operations if desired.
-    // async fn begin_transaction(&mut self) -> Result<(), Self::ConnectionError>;
-    // async fn commit_transaction(&mut self) -> Result<(), Self::ConnectionError>;
-    // async fn rollback_transaction(&mut self) -> Result<(), Self::ConnectionError>;
+    /// Begins a new database transaction.
+    async fn begin_transaction(&mut self) -> Result<(), Self::ConnectionError>;
+
+    /// Commits the current database transaction.
+    async fn commit_transaction(&mut self) -> Result<(), Self::ConnectionError>;
+
+    /// Rolls back the current database transaction.
+    async fn rollback_transaction(&mut self) -> Result<(), Self::ConnectionError>;
 
     /// Closes the database connection.
     async fn close(self) -> Result<(), Self::ConnectionError>;
