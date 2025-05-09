@@ -3,8 +3,9 @@
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message, MaybeTlsStream};
 use tokio_tungstenite::tungstenite::error::Error as WsError;
 use tokio_tungstenite::tungstenite::handshake::client::Response as HandshakeResponse;
+// Removed specific CloseCode import, will use full path
 use url::Url;
-use futures_util::{StreamExt, SinkExt};
+use futures_util::{StreamExt, SinkExt}; // Ensure this is present
 use tokio::net::TcpStream;
 use std::fmt;
 
@@ -62,13 +63,14 @@ impl WebSocketClient {
         if self.stream.is_some() {
             return Err(WebSocketClientError::AlreadyConnected);
         }
-        let (ws_stream, response) = connect_async(self.url.clone())
+        // Use .as_str() for connect_async to ensure correct IntoClientRequest impl
+        let (ws_stream, response) = connect_async(self.url.as_str()) 
             .await
             .map_err(WebSocketClientError::ConnectionError)?;
 
-        // Check if handshake was successful
-        if response.status().is_success() || response.status().is_informational() { // 101 is Switching Protocols
-             self.stream = Some(ws_stream);
+        // Check if handshake was successful (must be 101 Switching Protocols)
+        if response.status() == tokio_tungstenite::tungstenite::http::StatusCode::SWITCHING_PROTOCOLS {
+            self.stream = Some(ws_stream);
             Ok(())
         } else {
             Err(WebSocketClientError::HandshakeError(response))
@@ -77,7 +79,7 @@ impl WebSocketClient {
 
     pub async fn send_text(&mut self, text: String) -> Result<(), WebSocketClientError> {
         if let Some(stream) = self.stream.as_mut() {
-            stream.send(Message::Text(text)).await.map_err(WebSocketClientError::SendError)
+            stream.send(Message::Text(text.into())).await.map_err(WebSocketClientError::SendError)
         } else {
             Err(WebSocketClientError::NotConnected)
         }
@@ -85,7 +87,7 @@ impl WebSocketClient {
 
     pub async fn send_binary(&mut self, data: Vec<u8>) -> Result<(), WebSocketClientError> {
         if let Some(stream) = self.stream.as_mut() {
-            stream.send(Message::Binary(data)).await.map_err(WebSocketClientError::SendError)
+            stream.send(Message::Binary(data.into())).await.map_err(WebSocketClientError::SendError)
         } else {
             Err(WebSocketClientError::NotConnected)
         }
@@ -93,7 +95,7 @@ impl WebSocketClient {
     
     pub async fn send_ping(&mut self, data: Vec<u8>) -> Result<(), WebSocketClientError> {
         if let Some(stream) = self.stream.as_mut() {
-            stream.send(Message::Ping(data)).await.map_err(WebSocketClientError::SendError)
+            stream.send(Message::Ping(data.into())).await.map_err(WebSocketClientError::SendError)
         } else {
             Err(WebSocketClientError::NotConnected)
         }
@@ -111,16 +113,15 @@ impl WebSocketClient {
         if let Some(stream) = self.stream.as_mut() {
             let close_frame = tokio_tungstenite::tungstenite::protocol::frame::CloseFrame {
                 code: code.map_or(
-                    tokio_tungstenite::tungstenite::protocol::CloseCode::Normal, 
-                    |c| tokio_tungstenite::tungstenite::protocol::CloseCode::from(c)
+                    tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode::Normal, // Full path
+                    |c| tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode::from(c) // Full path
                 ),
-                reason: reason.map_or(std::borrow::Cow::Borrowed(""), |r| std::borrow::Cow::Owned(r)),
+                reason: reason.map_or("".into(), |s| s.into()), // Corrected conversion for Option<String> to Utf8Bytes
             };
-            stream.send(Message::Close(Some(close_frame))).await.map_err(WebSocketClientError::SendError)?;
-            // The stream will be fully closed when the server acknowledges or after a timeout.
-            // For simplicity, we just mark it as None here. Proper handling might involve waiting for the close handshake.
-            self.stream = None; 
-            Ok(())
+            // Use the stream's close method for a proper closing handshake
+            let close_result = stream.close(Some(close_frame)).await;
+            self.stream = None; // Stream is now considered closed/unusable from client's perspective
+            close_result.map_err(WebSocketClientError::ConnectionError) // Map WsError to an appropriate client error
         } else {
             Err(WebSocketClientError::NotConnected)
         }
@@ -151,19 +152,19 @@ mod tests {
                         match msg {
                             Ok(Message::Text(txt)) => {
                                 println!("Test server received text: {}", txt);
-                                if websocket.send(Message::Text(format!("Echo: {}", txt))).await.is_err() {
+                                if websocket.send(Message::Text(format!("Echo: {}", txt).into())).await.is_err() {
                                     break;
                                 }
                             }
                             Ok(Message::Binary(bin)) => {
                                 println!("Test server received binary: {:?}", bin);
-                                if websocket.send(Message::Binary(bin)).await.is_err() {
+                                if websocket.send(Message::Binary(bin.into())).await.is_err() {
                                     break;
                                 }
                             }
                             Ok(Message::Ping(data)) => {
                                 println!("Test server received ping");
-                                if websocket.send(Message::Pong(data)).await.is_err() {
+                                if websocket.send(Message::Pong(data.into())).await.is_err() {
                                     break;
                                 }
                             }

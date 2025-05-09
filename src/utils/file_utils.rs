@@ -1,7 +1,7 @@
 // src/utils/file_utils.rs
 
 use std::fs;
-use std::io::{self, Read, Write};
+use std::io::{self, Write}; // Removed Read from here
 use std::path::Path;
 
 /// Reads the entire content of a file into a string.
