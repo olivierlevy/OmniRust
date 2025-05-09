@@ -16,6 +16,7 @@ thiserror = "1.0"
 anyhow = "1.0"
 config = "0.13"  # Ensure this is present
 chrono = "0.4"
+toml = "0.8"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
