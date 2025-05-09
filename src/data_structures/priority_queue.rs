@@ -11,20 +11,22 @@ use std::collections::BinaryHeap;
 /// This struct is used by the `BinaryHeap` to maintain the priority queue order.
 /// It implements `Ord` and `PartialOrd` to ensure that items with higher priority
 /// values are considered "greater" (and thus dequeued first by the max-heap).
-#[derive(Debug, PartialEq, Eq)]
-struct PriorityQueueItem<T> {
+#[derive(Debug, Eq, PartialEq)] // Derive Eq and PartialEq
+struct PriorityQueueItem<T: Eq + PartialEq> { // Add bounds to T
     priority: i32,
     item: T,
 }
 
-impl<T> Ord for PriorityQueueItem<T> {
+impl<T: Eq + PartialEq> Ord for PriorityQueueItem<T> {
     fn cmp(&self, other: &Self) -> Ordering {
         // Reverse the order so that the highest priority item is at the top.
         other.priority.cmp(&self.priority)
+        // If priorities are equal and T also implements Ord, you could add:
+        // .then_with(|| self.item.cmp(&other.item))
     }
 }
 
-impl<T> PartialOrd for PriorityQueueItem<T> {
+impl<T: Eq + PartialEq> PartialOrd for PriorityQueueItem<T> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
@@ -52,11 +54,11 @@ impl<T> PartialOrd for PriorityQueueItem<T> {
 /// assert_eq!(pq.pop(), None);
 /// ```
 #[derive(Debug)]
-pub struct PriorityQueue<T> {
+pub struct PriorityQueue<T: Eq + PartialEq> { // Add bounds to T here
     heap: BinaryHeap<PriorityQueueItem<T>>,
 }
 
-impl<T> PriorityQueue<T> {
+impl<T: Eq + PartialEq> PriorityQueue<T> { // And here
     /// Creates a new, empty `PriorityQueue`.
     ///
     /// # Examples

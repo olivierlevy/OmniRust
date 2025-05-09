@@ -3,3 +3,4 @@
 pub mod tree;
 pub mod graph;
 pub mod circular_buffer;
+pub mod priority_queue;
