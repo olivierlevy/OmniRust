@@ -243,3 +243,6 @@ mod tests {
 // pub mod kmeans {
 //     // ... K-Means clustering algorithm structure ...
 // }
+
+// Re-export key items from submodules if desired
+pub use linear_regression::LinearRegressionModel;

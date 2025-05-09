@@ -1,9 +1,9 @@
-use async_graphql::{Context, Object, Result, SimpleObject, ID, Schema, Subscription, EmptySubscription, value};
+use async_graphql::{Context, Object, Result, SimpleObject, ID, Subscription}; // Removed Schema, EmptySubscription, value from main imports
 use std::sync::Mutex;
 use once_cell::sync::Lazy;
 use std::collections::HashMap; // Using HashMap for easier ID management for now
-use tokio::sync::broadcast::{self, Sender, Receiver};
-use futures_util::stream::{Stream, StreamExt};
+use tokio::sync::broadcast::{self, Sender}; // Removed Receiver
+use futures_util::stream::Stream; // Removed StreamExt
 
 
 // In-memory store for items
@@ -179,9 +179,9 @@ impl SubscriptionRoot {
 #[cfg(test)]
 mod tests {
     use super::*;
-    // use async_graphql::{Schema, EmptySubscription, value}; // EmptySubscription will be replaced by SubscriptionRoot
+    use async_graphql::{Schema, value}; // Schema and value are used in tests
 
-    fn create_schema() -> Schema<QueryRoot, MutationRoot, SubscriptionRoot> { // Updated schema
+    fn create_schema() -> Schema<QueryRoot, MutationRoot, SubscriptionRoot> {
         Schema::build(QueryRoot {}, MutationRoot {}, SubscriptionRoot {}).finish()
     }
 

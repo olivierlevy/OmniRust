@@ -25,14 +25,14 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{
-    backend::{Backend, CrosstermBackend},
+    backend::CrosstermBackend, // Removed Backend
     layout::{Alignment, Constraint, Direction, Layout},
-    style::{Color, Modifier, Style},
-    text::{Line, Span},
+    style::{Color, Style},
+    // Removed text::{Line, Span} as they are not used in simple Paragraph
     widgets::{Block, Borders, Paragraph},
     Frame, Terminal,
 };
-use std::{io, time::{Duration, Instant}};
+use std::{io, time::Duration}; // Removed Instant
 
 struct CounterApp {
     counter: i32,
@@ -107,7 +107,7 @@ pub fn run_counter_tui_app() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn ui<B: Backend>(f: &mut Frame<B>, app: &CounterApp) {
+fn ui(f: &mut Frame, app: &CounterApp) { // Removed <B: Backend> and Frame<B> -> Frame
     let size = f.size();
     let chunks = Layout::default()
         .direction(Direction::Vertical)

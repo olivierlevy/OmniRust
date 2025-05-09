@@ -35,7 +35,7 @@ async-stream = "0.3" # For GraphQL Subscriptions
 async-trait = "0.1"
 sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "macros"] }
 ndarray = { version = "0.15", features = ["serde"] }
-ndarray-linalg = { version = "0.16", features = ["openblas-static"] } # For linear algebra in ML
+ndarray-linalg = "0.16" # For linear algebra in ML - trying without explicit BLAS feature
 num-traits = "0.2"
 axum = "0.7"
 once_cell = "1.19"
