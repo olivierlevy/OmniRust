@@ -2,7 +2,7 @@
 use omnirust::core::init_logger::{init_logger, log_info, log_error};
 use omnirust::core::config::AppConfig;
 use omnirust::graphql; 
-use omnirust::graphql::schema::QueryRoot;
+use omnirust::graphql::schema::{QueryRoot, MutationRoot}; // Added MutationRoot
 use omnirust::websocket::server as websocket_server;
 use omnirust::cli::arg_parser::{self, Commands, UtilCommands}; // Import CLI parser and enums
 use omnirust::utils::string_utils; // For utility functions
@@ -55,7 +55,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     log_info(&format!("Database URL: {}", config.database_url));
     log_info(&format!("Log Level: {}", config.log_level));
 
-    let schema = Schema::build(QueryRoot { system_status: "System is running".to_string() }, EmptyMutation, EmptySubscription).finish();
+    // Instantiate QueryRoot (now an empty struct) and MutationRoot
+    let query_root = QueryRoot {}; 
+    let mutation_root = MutationRoot {};
+    // Build the schema with QueryRoot, MutationRoot, and EmptySubscription
+    let schema = Schema::build(query_root, mutation_root, EmptySubscription).finish();
 
     // Spawn GraphQL server
     let gql_schema = schema.clone(); // Clone schema for the GraphQL server

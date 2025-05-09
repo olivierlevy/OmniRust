@@ -28,6 +28,7 @@ OmniRust offers a wide array of functionalities, including but not limited to:
 *   **Web Services**:
     *   REST API framework (e.g., using Axum - see `web::rest_api`)
     *   HTML Templating (e.g., using Askama - see `web::templating`)
+    *   GraphQL API Server (`graphql` module)
     *   WebAssembly (Wasm) support (conceptual, see `web::wasm`)
 *   **Database Interaction**:
     *   SQL connectors and traits (conceptual, see `database` module)
@@ -64,14 +65,97 @@ OmniRust itself is primarily a library, but it also includes a main binary that 
 
 ### Running the Main Application (Server/CLI)
 
-To run the main OmniRust binary (which might start a server or provide CLI tools, depending on its `main.rs`):
+To run the main OmniRust binary (which starts the GraphQL and WebSocket servers by default if no CLI command is given):
 ```sh
 cargo run
-# or, to pass arguments to the OmniRust CLI
+```
+The GraphQL server will typically be available at `http://127.0.0.1:PORT/graphql` (check `src/graphql/server.rs` or `src/main.rs` for the exact port, often 8000 or similar). You can use a GraphQL client like Postman or Insomnia to interact with it.
+
+To pass arguments to the OmniRust CLI:
+```sh
 cargo run -- util reverse "hello from omnirust cli"
 ```
 
 Check `src/main.rs` in the OmniRust project root to see what the main binary is configured to do.
+
+## Usage
+
+### GraphQL API
+
+OmniRust includes a GraphQL server powered by `async-graphql`. When the main application is run (via `cargo run` without specific CLI commands), it starts a GraphQL server.
+
+**Available Queries:**
+
+*   `systemStatus: String`: Returns the current operational status of the system.
+    ```graphql
+    query {
+      systemStatus
+    }
+    ```
+*   `items: [Item!]!`: Retrieves a list of all available items.
+    ```graphql
+    query {
+      items {
+        id
+        name
+      }
+    }
+    ```
+*   `item(id: ID!): Item`: Retrieves a specific item by its ID.
+    ```graphql
+    query {
+      item(id: "1") {
+        id
+        name
+      }
+    }
+    ```
+
+**Available Mutations:**
+
+*   `addItem(name: String!): Item!`: Adds a new item with the given name.
+    ```graphql
+    mutation {
+      addItem(name: "New Awesome Item") {
+        id
+        name
+      }
+    }
+    ```
+*   `updateItem(id: ID!, name: String): Item`: Updates the name of an existing item. Returns the updated item or `null` if not found.
+    ```graphql
+    mutation {
+      updateItem(id: "1", name: "Updated Item Name") {
+        id
+        name
+      }
+    }
+    ```
+*   `deleteItem(id: ID!): Boolean!`: Deletes an item by its ID. Returns `true` if successful, `false` otherwise.
+    ```graphql
+    mutation {
+      deleteItem(id: "1")
+    }
+    ```
+
+**Item Type:**
+```graphql
+type Item {
+  id: ID!
+  name: String!
+}
+```
+(Currently, items are stored in an in-memory list. Future enhancements could connect this to the database module.)
+
+### WebSocket Communication
+
+Example message (details depend on the `websocket_server::handle_connection` implementation):
+```json
+{
+  "type": "sendMessage",
+  "content": "Hello, OmniRust!"
+}
+```
 
 ## OmniRust Sample Application (`omnirust_sample_app`)
 
