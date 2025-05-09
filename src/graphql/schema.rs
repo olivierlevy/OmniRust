@@ -182,6 +182,11 @@ mod tests {
     use super::*;
     use async_graphql::Schema; // Schema is used in tests, removed value
     use futures_util::StreamExt; // Added StreamExt for .next() on streams within tests
+    use once_cell::sync::Lazy; // For TEST_MUTEX
+    use std::sync::Mutex;    // For TEST_MUTEX
+
+    // Mutex to serialize tests modifying shared static state (ITEMS, NEXT_ID)
+    static TEST_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
     fn create_schema() -> Schema<QueryRoot, MutationRoot, SubscriptionRoot> {
         Schema::build(QueryRoot {}, MutationRoot {}, SubscriptionRoot {}).finish()
@@ -189,6 +194,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_add_item_mutation() {
+        let _guard = TEST_MUTEX.lock().unwrap(); // Lock to ensure test serializes
+        ITEMS.lock().unwrap().clear(); // Ensure clean state
+        *NEXT_ID.lock().unwrap() = 1;
+
         let schema = create_schema();
         let query = r#"
             mutation {
@@ -199,10 +208,14 @@ mod tests {
             }
         "#;
         let res = schema.execute(query).await;
-        let data = res.data.into_json().unwrap(); // data is serde_json::Value
+
+        if !res.errors.is_empty() {
+            panic!("GraphQL execution returned errors: {:?}", res.errors);
+        }
+        let data = res.data.into_json().expect("Failed to convert GraphQL Value to JSON");
         
         assert_eq!(data["addItem"]["name"].as_str().unwrap(), "Test Item 1");
-        let item_id_from_add = data["addItem"]["id"].as_str().unwrap().to_string();
+        let item_id_from_add = data["addItem"]["id"].as_str().expect("addItem.id should be a string").to_string();
         assert!(!item_id_from_add.is_empty());
 
         // Optionally, query for the item to ensure it's in the list
@@ -222,12 +235,13 @@ mod tests {
 
         // Clean up static storage for other tests if necessary, though for this simple test it's okay.
         // For more complex scenarios, consider dependency injection for the store.
-        ITEMS.lock().unwrap().clear();
-        *NEXT_ID.lock().unwrap() = 1;
+        // Clean up is handled by the lock and explicit clear/reset at start of this test
+        // and potentially others if they also acquire the lock.
     }
 
     #[tokio::test]
     async fn test_items_query_empty() {
+        let _guard = TEST_MUTEX.lock().unwrap(); // Lock to ensure test serializes
         ITEMS.lock().unwrap().clear(); // Ensure store is empty
         *NEXT_ID.lock().unwrap() = 1;
 
@@ -260,6 +274,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_update_item_mutation() {
+        let _guard = TEST_MUTEX.lock().unwrap(); // Lock to ensure test serializes
         ITEMS.lock().unwrap().clear();
         *NEXT_ID.lock().unwrap() = 1;
         let schema = create_schema();
@@ -308,6 +323,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_delete_item_mutation() {
+        let _guard = TEST_MUTEX.lock().unwrap(); // Lock to ensure test serializes
         ITEMS.lock().unwrap().clear();
         *NEXT_ID.lock().unwrap() = 1;
         let schema = create_schema();
@@ -341,6 +357,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_item_events_subscription() {
+        let _guard = TEST_MUTEX.lock().unwrap(); // Lock to ensure test serializes
         ITEMS.lock().unwrap().clear();
         *NEXT_ID.lock().unwrap() = 1;
         let schema = create_schema();
