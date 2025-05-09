@@ -1,19 +1,75 @@
 // src/data_structures/tree.rs
 
+//! # Generic Tree Data Structure
+//!
+//! This module provides a generic tree data structure (`Tree` and `TreeNode`).
+//! Nodes store values of a generic type `T` and can have multiple children.
+//! The tree uses `Rc<RefCell<TreeNode<T>>>` to allow for shared ownership and
+//! interior mutability, enabling a node to be owned by its parent and potentially
+//! referenced elsewhere, while still allowing modifications to its children list.
+//!
+//! ## Features
+//! - Generic over the type of value stored in nodes (`T`).
+//! - Nodes can have multiple children.
+//! - Shared ownership of nodes via `Rc`.
+//! - Interior mutability for children via `RefCell`.
+//! - Basic operations: creating nodes, adding children, creating a tree with a root.
+//! - Implements `Debug` and `Display` (for a simple textual representation).
+//!
+//! ## Usage
+//!
+//! ```
+//! use omnirust::data_structures::tree::{Tree, TreeNode}; // Adjust path as per your project
+//! use std::rc::Rc;
+//! use std::cell::RefCell;
+//!
+//! // Create a new tree with a root value
+//! let mut tree = Tree::with_root("root_value".to_string());
+//!
+//! if let Some(root_node_rc) = &tree.root {
+//!     // Add children to the root node
+//!     let mut root_node_mut = root_node_rc.borrow_mut();
+//!     let child1_rc = root_node_mut.add_child("child1_value".to_string());
+//!     let child2_rc = root_node_mut.add_child("child2_value".to_string());
+//!
+//!     // Add a grandchild
+//!     child1_rc.borrow_mut().add_child("grandchild_value".to_string());
+//! }
+//!
+//! // Print the tree structure
+//! println!("{}", tree);
+//! ```
+//!
+//! ## Considerations
+//! - This implementation does not include parent pointers to avoid `Rc` cycles.
+//!   If parent pointers are needed, `Weak<RefCell<TreeNode<T>>>` should be used,
+//!   and care must be taken to manage lifetimes and potential cycles.
+//! - For very large trees or performance-critical scenarios, other representations
+//!   or memory management strategies might be more suitable.
+
 use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 use std::rc::Rc;
 use std::cell::RefCell;
 
-// A node in the tree.
+/// Represents a node in the `Tree`.
+///
+/// Each `TreeNode` holds a `value` of generic type `T` and a vector of
+/// `children`. Children are also `TreeNode`s, wrapped in `Rc<RefCell<...>>`
+/// to allow shared ownership and interior mutability.
 #[derive(Debug)]
 pub struct TreeNode<T: Display + Debug> {
+    /// The value stored in this node.
     pub value: T,
+    /// A vector of child nodes. Each child is an `Rc<RefCell<TreeNode<T>>>`.
     pub children: Vec<Rc<RefCell<TreeNode<T>>>>,
     // pub parent: Option<Weak<RefCell<TreeNode<T>>>>, // For parent pointer if needed
 }
 
 impl<T: Display + Debug> TreeNode<T> {
-    /// Creates a new tree node with the given value.
+    /// Creates a new tree node with the given value and no children.
+    ///
+    /// # Arguments
+    /// * `value` - The value to store in the new node.
     pub fn new(value: T) -> Self {
         TreeNode {
             value,
@@ -22,7 +78,17 @@ impl<T: Display + Debug> TreeNode<T> {
         }
     }
 
-    /// Adds a child node to this node.
+    /// Adds a new child to this node with the given value.
+    ///
+    /// A new `TreeNode` is created with `child_value`, wrapped in `Rc<RefCell<...>>`,
+    /// and added to this node's children.
+    ///
+    /// # Arguments
+    /// * `child_value` - The value for the new child node.
+    ///
+    /// # Returns
+    /// An `Rc<RefCell<TreeNode<T>>>` pointing to the newly created child node,
+    /// allowing further modifications or additions of grandchildren.
     pub fn add_child(&mut self, child_value: T) -> Rc<RefCell<TreeNode<T>>> {
         let child_node = Rc::new(RefCell::new(TreeNode::new(child_value)));
         self.children.push(Rc::clone(&child_node));
@@ -31,39 +97,58 @@ impl<T: Display + Debug> TreeNode<T> {
         child_node
     }
 
-    /// Adds an existing TreeNode (wrapped in Rc<RefCell<>>) as a child.
+    /// Adds an existing `TreeNode` (already wrapped in `Rc<RefCell<...>>`) as a child.
+    ///
+    /// # Arguments
+    /// * `child_node` - An `Rc<RefCell<TreeNode<T>>>` pointing to the node to be added as a child.
     pub fn add_child_node(&mut self, child_node: Rc<RefCell<TreeNode<T>>>) {
         self.children.push(child_node);
     }
 }
 
-// A simple Tree structure, essentially a wrapper around the root node.
+/// Represents a generic tree structure.
+///
+/// The `Tree` itself is a simple wrapper around an optional root node.
+/// If `root` is `None`, the tree is empty. Otherwise, it points to the
+/// root `TreeNode` of the tree, wrapped in `Rc<RefCell<...>>`.
 #[derive(Debug)]
 pub struct Tree<T: Display + Debug> {
+    /// The root node of the tree. `None` if the tree is empty.
     pub root: Option<Rc<RefCell<TreeNode<T>>>>,
 }
 
 impl<T: Display + Debug> Tree<T> {
-    /// Creates a new empty tree.
+    /// Creates a new, empty `Tree`.
+    /// The `root` will be `None`.
     pub fn new() -> Self {
         Tree { root: None }
     }
 
-    /// Creates a new tree with a root node having the given value.
+    /// Creates a new `Tree` with a root node initialized with the given value.
+    ///
+    /// # Arguments
+    /// * `value` - The value for the root node.
     pub fn with_root(value: T) -> Self {
         Tree {
             root: Some(Rc::new(RefCell::new(TreeNode::new(value)))),
         }
     }
 
-    /// Sets the root of the tree.
+    /// Sets or replaces the root node of the tree with a new node containing the given value.
+    ///
+    /// # Arguments
+    /// * `value` - The value for the new root node.
+    ///
+    /// # Returns
+    /// An `Rc<RefCell<TreeNode<T>>>` pointing to the new root node.
     pub fn set_root(&mut self, value: T) -> Rc<RefCell<TreeNode<T>>> {
         let new_root = Rc::new(RefCell::new(TreeNode::new(value)));
         self.root = Some(Rc::clone(&new_root));
         new_root
     }
 
-    // Helper function for recursive display (optional)
+    // Helper function for recursive display.
+    // This function is private and used by the `Display` implementation.
     fn display_recursive(node: &Rc<RefCell<TreeNode<T>>>, f: &mut Formatter<'_>, depth: usize) -> FmtResult {
         writeln!(f, "{}{}", "  ".repeat(depth), node.borrow().value)?;
         for child in &node.borrow().children {
@@ -74,12 +159,15 @@ impl<T: Display + Debug> Tree<T> {
 }
 
 impl<T: Display + Debug> Default for Tree<T> {
+    /// Creates a new, empty `Tree`. Equivalent to `Tree::new()`.
     fn default() -> Self {
         Self::new()
     }
 }
 
-// Implement Display for a nice printout of the tree (optional)
+/// Implements the `Display` trait for `Tree`.
+/// This allows the tree to be printed in a human-readable format,
+/// showing its hierarchical structure.
 impl<T: Display + Debug> Display for Tree<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match &self.root {

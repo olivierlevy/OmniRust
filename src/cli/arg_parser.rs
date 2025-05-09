@@ -3,16 +3,21 @@
 use clap::{Parser, Subcommand, Args};
 
 /// OmniRust Command-Line Interface
-/// A versatile toolkit for various operations.
+/// 
+/// A versatile toolkit built with the OmniRust framework, offering a range of
+/// functionalities from simple utilities to complex operations.
+/// Use `omnirust --help` for a brief overview or `omnirust <SUBCOMMAND> --help` for
+/// detailed help on a specific subcommand.
 #[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
+#[command(author, version, about, long_about = None, propagate_version = true)]
 pub struct CliArgs {
-    /// Optional name to operate on
-    #[arg(short, long, value_name = "NAME")]
+    /// An optional name parameter for general use, its effect depends on the subcommand.
+    #[arg(short, long, value_name = "NAME", global = true)]
     pub name: Option<String>,
 
-    /// Turn debugging information on
-    #[arg(short, long, action = clap::ArgAction::Count)]
+    /// Increases verbosity of debugging information.
+    /// Can be used multiple times (e.g., -d, -dd, -ddd).
+    #[arg(short, long, action = clap::ArgAction::Count, global = true)]
     pub debug: u8,
 
     #[command(subcommand)]
@@ -21,25 +26,36 @@ pub struct CliArgs {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    /// Manages test operations
+    /// Manages and executes test-related operations within the OmniRust framework.
+    /// Useful for developers and for verifying framework components.
+    #[command(visible_alias = "tst")]
     Test(TestArgs),
-    /// Utility commands
+
+    /// Provides access to various utility functions built into OmniRust.
+    /// Includes string manipulation, file operations, etc.
+    #[command(visible_alias = "utils")]
     Util(UtilArgs),
     // Add more subcommands for different components like 'server', 'db', 'ml', etc.
+    // Example:
+    // /// Starts one of the OmniRust servers (e.g., GraphQL, REST, WebSocket).
+    // Server(ServerArgs),
 }
 
 #[derive(Args, Debug)]
+#[command(about = "Manages test operations.", long_about = "Use this subcommand to list available tests or run specific test cases.")]
 pub struct TestArgs {
-    /// Lists test values
-    #[arg(short, long)]
+    /// Lists all available test categories or specific test values if applicable.
+    #[arg(short, long, help = "Display a list of available test items.")]
     pub list: bool,
 
-    /// Specific test case to run
-    #[arg(value_name = "TEST_CASE")]
+    /// Specifies a particular test case or scenario to execute.
+    /// The exact format depends on the test harness.
+    #[arg(value_name = "TEST_CASE", help = "The name or ID of the test case to run.")]
     pub case: Option<String>,
 }
 
 #[derive(Args, Debug)]
+#[command(about = "Access utility functions.", long_about = "Provides a collection of general-purpose utility commands for common tasks.")]
 pub struct UtilArgs {
     #[command(subcommand)]
     pub command: UtilCommands,
@@ -47,19 +63,26 @@ pub struct UtilArgs {
 
 #[derive(Subcommand, Debug)]
 pub enum UtilCommands {
-    /// Reverses a string
+    /// Reverses the characters in a given string.
+    /// Example: omnirust util reverse "hello" -> "olleh"
     Reverse {
-        /// The string to reverse
-        #[arg(required = true)]
+        /// The input string that will be reversed.
+        #[arg(required = true, help = "The string to be reversed.")]
         input_string: String,
     },
-    /// Checks if a string is blank
+    /// Checks if the given string is empty or consists only of whitespace.
+    /// Example: omnirust util is-blank "  " -> true
+    #[command(visible_alias = "blank")]
     IsBlank {
-        /// The string to check
-        #[arg(required = true)]
+        /// The input string to check for blankness.
+        #[arg(required = true, help = "The string to check if it's blank.")]
         input_string: String,
     },
-    // Could add file utils, datetime utils etc. as subcommands here
+    // Future utility subcommands:
+    // /// Performs file operations.
+    // File(FileUtilArgs),
+    // /// Performs date/time operations.
+    // DateTime(DateTimeUtilArgs),
 }
 
 /// Parses command line arguments using clap.
