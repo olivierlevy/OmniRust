@@ -4,7 +4,7 @@ use once_cell::sync::Lazy;
 use std::collections::HashMap; // Using HashMap for easier ID management for now
 use tokio::sync::broadcast::{self, Sender}; // Removed Receiver
 use futures_util::stream::Stream; // Removed StreamExt
-use futures_util::StreamExt; // Added StreamExt for .next() on streams
+// Removed unused: use futures_util::StreamExt; 
 
 
 // In-memory store for items
@@ -181,6 +181,7 @@ impl SubscriptionRoot {
 mod tests {
     use super::*;
     use async_graphql::Schema; // Schema is used in tests, removed value
+    use futures_util::StreamExt; // Added StreamExt for .next() on streams within tests
 
     fn create_schema() -> Schema<QueryRoot, MutationRoot, SubscriptionRoot> {
         Schema::build(QueryRoot {}, MutationRoot {}, SubscriptionRoot {}).finish()
