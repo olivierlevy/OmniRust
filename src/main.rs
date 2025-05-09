@@ -2,12 +2,12 @@
 use omnirust::core::init_logger::{init_logger, log_info, log_error};
 use omnirust::core::config::AppConfig;
 use omnirust::graphql; 
-use omnirust::graphql::schema::{QueryRoot, MutationRoot}; // Added MutationRoot
+use omnirust::graphql::schema::{QueryRoot, MutationRoot, SubscriptionRoot}; // Added SubscriptionRoot
 use omnirust::websocket::server as websocket_server;
 use omnirust::cli::arg_parser::{self, Commands, UtilCommands}; // Import CLI parser and enums
 use omnirust::utils::string_utils; // For utility functions
 
-use async_graphql::{Schema, EmptyMutation, EmptySubscription};
+use async_graphql::Schema; // Removed EmptyMutation, EmptySubscription as they are not directly used here now
 use tokio::net::TcpListener;
 use std::error::Error;
 use tokio_tungstenite::accept_async;
@@ -58,8 +58,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Instantiate QueryRoot (now an empty struct) and MutationRoot
     let query_root = QueryRoot {}; 
     let mutation_root = MutationRoot {};
-    // Build the schema with QueryRoot, MutationRoot, and EmptySubscription
-    let schema = Schema::build(query_root, mutation_root, EmptySubscription).finish();
+    let subscription_root = SubscriptionRoot {}; // Instantiate SubscriptionRoot
+    // Build the schema with QueryRoot, MutationRoot, and SubscriptionRoot
+    let schema = Schema::build(query_root, mutation_root, subscription_root).finish();
 
     // Spawn GraphQL server
     let gql_schema = schema.clone(); // Clone schema for the GraphQL server

@@ -138,11 +138,31 @@ OmniRust includes a GraphQL server powered by `async-graphql`. When the main app
     }
     ```
 
+**Available Subscriptions:**
+
+*   `itemEvents: ItemEvent!`: Subscribes to real-time events for items (ADDED, UPDATED, DELETED).
+    ```graphql
+    subscription {
+      itemEvents {
+        eventType
+        item {
+          id
+          name
+        }
+      }
+    }
+    ```
+
 **Item Type:**
 ```graphql
 type Item {
   id: ID!
   name: String!
+}
+
+type ItemEvent {
+  eventType: String!
+  item: Item!
 }
 ```
 (Currently, items are stored in an in-memory list. Future enhancements could connect this to the database module.)

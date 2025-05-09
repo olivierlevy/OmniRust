@@ -31,6 +31,7 @@ tonic = "0.11.0"
 prost = "0.12.3"
 prost-types = "0.12.3"
 futures-util = "0.3" # For StreamExt, SinkExt
+async-stream = "0.3" # For GraphQL Subscriptions
 async-trait = "0.1"
 sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "macros"] }
 ndarray = { version = "0.15", features = ["serde"] }

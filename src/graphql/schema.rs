@@ -1,11 +1,35 @@
-use async_graphql::{Context, Object, Result, SimpleObject, ID};
+use async_graphql::{Context, Object, Result, SimpleObject, ID, Schema, Subscription, EmptySubscription, value};
 use std::sync::Mutex;
 use once_cell::sync::Lazy;
 use std::collections::HashMap; // Using HashMap for easier ID management for now
+use tokio::sync::broadcast::{self, Sender, Receiver};
+use futures_util::stream::{Stream, StreamExt};
+
 
 // In-memory store for items
 static ITEMS: Lazy<Mutex<HashMap<String, Item>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 static NEXT_ID: Lazy<Mutex<u32>> = Lazy::new(|| Mutex::new(1));
+
+// Channel for broadcasting item events
+// The channel will send ItemEvent, which needs to be Clone and Send + Sync.
+// For simplicity, let's make ItemEvent an enum that can be cloned.
+static ITEM_EVENT_SENDER: Lazy<Sender<ItemEvent>> = Lazy::new(|| {
+    let (tx, _rx) = broadcast::channel(16); // Capacity of 16
+    tx
+});
+
+/// Represents events related to items, used for GraphQL subscriptions.
+///
+/// This struct is broadcast when items are added, updated, or deleted.
+#[derive(Clone, Debug, SimpleObject)]
+pub struct ItemEvent {
+    /// Describes the type of event that occurred (e.g., "ADDED", "UPDATED", "DELETED").
+    pub event_type: String,
+    /// The `Item` that is the subject of the event.
+    /// For "DELETED" events, this will contain the state of the item just before deletion.
+    pub item: Item,
+}
+
 
 /// Represents a generic item in the system.
 #[derive(SimpleObject, Clone, Debug)]
@@ -71,6 +95,11 @@ impl MutationRoot {
             name,
         };
         items_guard.insert(item.id.to_string(), item.clone());
+        
+        // Broadcast event
+        let event = ItemEvent { event_type: "ADDED".to_string(), item: item.clone() };
+        let _ = ITEM_EVENT_SENDER.send(event); // Ignore error if no subscribers
+
         Ok(item)
     }
 
@@ -81,11 +110,16 @@ impl MutationRoot {
     /// Returns the updated `Item` if found, otherwise `null`.
     async fn update_item(&self, _ctx: &Context<'_>, id: ID, name: Option<String>) -> Result<Option<Item>> {
         let mut items_guard = ITEMS.lock().unwrap();
-        if let Some(item) = items_guard.get_mut(id.as_str()) {
+        if let Some(item_ref) = items_guard.get_mut(id.as_str()) {
             if let Some(n) = name {
-                item.name = n;
+                item_ref.name = n;
             }
-            Ok(Some(item.clone()))
+            let updated_item = item_ref.clone();
+            // Broadcast event
+            let event = ItemEvent { event_type: "UPDATED".to_string(), item: updated_item.clone() };
+            let _ = ITEM_EVENT_SENDER.send(event);
+
+            Ok(Some(updated_item))
         } else {
             Ok(None)
         }
@@ -97,17 +131,58 @@ impl MutationRoot {
     /// Returns `true` if the item was found and deleted, `false` otherwise.
     async fn delete_item(&self, _ctx: &Context<'_>, id: ID) -> Result<bool> {
         let mut items_guard = ITEMS.lock().unwrap();
-        Ok(items_guard.remove(id.as_str()).is_some())
+        if let Some(deleted_item) = items_guard.remove(id.as_str()) {
+            // Broadcast event
+            let event = ItemEvent { event_type: "DELETED".to_string(), item: deleted_item };
+            let _ = ITEM_EVENT_SENDER.send(event);
+            Ok(true)
+        } else {
+            Ok(false)
+        }
     }
 }
+
+/// The root of all GraphQL subscriptions.
+///
+/// Provides streams of events that clients can subscribe to.
+pub struct SubscriptionRoot;
+
+#[Subscription]
+impl SubscriptionRoot {
+    /// Subscribes to real-time events for items.
+    ///
+    /// Clients subscribing to this field will receive an `ItemEvent`
+    /// whenever an item is added, updated, or deleted.
+    async fn item_events(&self) -> impl Stream<Item = ItemEvent> {
+        let mut rx = ITEM_EVENT_SENDER.subscribe();
+        async_stream::stream! {
+            loop {
+                match rx.recv().await {
+                    Ok(event) => yield event,
+                    Err(broadcast::error::RecvError::Lagged(_)) => {
+                        // Handle lagged receiver if necessary, e.g., log or skip
+                        // For this example, we'll just continue
+                        eprintln!("GraphQL Subscription: Lagged!"); // TODO: Use proper logger
+                        continue;
+                    }
+                    Err(broadcast::error::RecvError::Closed) => {
+                        // Sender is dropped, stream ends
+                        break;
+                    }
+                }
+            }
+        }
+    }
+}
+
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use async_graphql::{Schema, EmptySubscription, value};
+    // use async_graphql::{Schema, EmptySubscription, value}; // EmptySubscription will be replaced by SubscriptionRoot
 
-    fn create_schema() -> Schema<QueryRoot, MutationRoot, EmptySubscription> {
-        Schema::build(QueryRoot {}, MutationRoot {}, EmptySubscription).finish()
+    fn create_schema() -> Schema<QueryRoot, MutationRoot, SubscriptionRoot> { // Updated schema
+        Schema::build(QueryRoot {}, MutationRoot {}, SubscriptionRoot {}).finish()
     }
 
     #[tokio::test]
@@ -258,6 +333,58 @@ mod tests {
         let data_non_existent = res_non_existent.data.into_json().unwrap();
         assert_eq!(data_non_existent["deleteItem"], value!(false));
         
+        ITEMS.lock().unwrap().clear();
+        *NEXT_ID.lock().unwrap() = 1;
+    }
+
+    #[tokio::test]
+    async fn test_item_events_subscription() {
+        ITEMS.lock().unwrap().clear();
+        *NEXT_ID.lock().unwrap() = 1;
+        let schema = create_schema();
+
+        // Start the subscription
+        let sub_query = "subscription { itemEvents { eventType item { id name } } }";
+        let mut stream = schema.execute_stream(sub_query).await;
+
+        // Perform addItem mutation
+        let add_mutation = r#"mutation { addItem(name: "Sub Item 1") { id name } }"#;
+        let add_res = schema.execute(add_mutation).await;
+        let add_data = add_res.data.into_json().unwrap();
+        let added_item_id = add_data["addItem"]["id"].as_str().unwrap().to_string();
+        let added_item_name = add_data["addItem"]["name"].as_str().unwrap().to_string();
+
+        // Check for ADDED event
+        let event_res = stream.next().await.unwrap();
+        let event_data = event_res.data.into_json().unwrap();
+        assert_eq!(event_data["itemEvents"]["eventType"], value!("ADDED"));
+        assert_eq!(event_data["itemEvents"]["item"]["id"], value!(added_item_id.clone()));
+        assert_eq!(event_data["itemEvents"]["item"]["name"], value!(added_item_name.clone()));
+
+        // Perform updateItem mutation
+        let update_mutation = format!(r#"mutation {{ updateItem(id: "{}", name: "Sub Item 1 Updated") {{ id name }} }}"#, added_item_id);
+        let _update_res = schema.execute(update_mutation).await;
+        
+        // Check for UPDATED event
+        let event_res_update = stream.next().await.unwrap();
+        let event_data_update = event_res_update.data.into_json().unwrap();
+        assert_eq!(event_data_update["itemEvents"]["eventType"], value!("UPDATED"));
+        assert_eq!(event_data_update["itemEvents"]["item"]["id"], value!(added_item_id.clone()));
+        assert_eq!(event_data_update["itemEvents"]["item"]["name"], value!("Sub Item 1 Updated"));
+
+        // Perform deleteItem mutation
+        let delete_mutation = format!(r#"mutation {{ deleteItem(id: "{}") }}"#, added_item_id);
+        let _delete_res = schema.execute(delete_mutation).await;
+
+        // Check for DELETED event
+        let event_res_delete = stream.next().await.unwrap();
+        let event_data_delete = event_res_delete.data.into_json().unwrap();
+        assert_eq!(event_data_delete["itemEvents"]["eventType"], value!("DELETED"));
+        assert_eq!(event_data_delete["itemEvents"]["item"]["id"], value!(added_item_id.clone()));
+        // The name of the deleted item might still be the last known name, which is "Sub Item 1 Updated"
+        assert_eq!(event_data_delete["itemEvents"]["item"]["name"], value!("Sub Item 1 Updated"));
+
+
         ITEMS.lock().unwrap().clear();
         *NEXT_ID.lock().unwrap() = 1;
     }
