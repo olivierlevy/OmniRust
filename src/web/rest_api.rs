@@ -8,7 +8,7 @@ use axum::{
     middleware, // Added for middleware
 };
 use serde::{Deserialize, Serialize};
-use validator::{Validate, ValidationError, ValidationErrors}; // Added for input validation
+use validator::Validate; // Added for input validation
 use crate::web::auth::token_auth_middleware; // Import the auth middleware
 use std::net::SocketAddr;
 use tokio::net::TcpListener; // Added for Axum 0.7 server
