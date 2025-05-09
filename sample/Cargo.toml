@@ -1,0 +1,16 @@
+[package]
+name = "omnirust_sample_app"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+omnirust = { path = ".." } # Depend on the omnirust library in the parent directory
+tokio = { version = "1", features = ["full"] }
+anyhow = "1.0" # For easy error handling in the sample app
+
+# Add other dependencies the sample app might need directly
+# For example, if demonstrating gRPC client, it might need tonic/prost itself for generated types
+# tonic = "0.11.0" # Match omnirust's version if using generated code directly
+# prost = "0.12.3"
