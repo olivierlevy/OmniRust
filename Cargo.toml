@@ -30,6 +30,8 @@ ndarray = { version = "0.15", features = ["serde"] }
 num-traits = "0.2"
 axum = "0.7"
 once_cell = "1.19"
+askama = { version = "0.12", features = ["with-axum"] }
+askama_axum = "0.4" # For direct Askama template response type in Axum
 
 [build-dependencies]
 tonic-build = { version = "0.13.1", features = ["prost"] }
