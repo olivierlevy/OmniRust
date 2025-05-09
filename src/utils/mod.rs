@@ -1,1 +1,3 @@
-// Utility functions (e.g., caching, logging, error handling)
+// src/utils/mod.rs
+
+pub mod string_utils;
