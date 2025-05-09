@@ -30,6 +30,9 @@ pub mod websocket;
 // Streaming utilities
 pub mod streaming;
 
+// Database utilities
+pub mod database;
+
 // You might also want to re-export key types or functions for easier access
 // For example:
 // pub use crate::core::config::AppConfig;
