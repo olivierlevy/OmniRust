@@ -1,9 +1,11 @@
 // Use the omnirust library crate
 use omnirust::core::init_logger::{init_logger, log_info, log_error};
 use omnirust::core::config::AppConfig;
-use omnirust::graphql; // Keep this for schema and server
-use omnirust::graphql::schema::QueryRoot; // Specific import for QueryRoot
-use omnirust::websocket::server as websocket_server; // Alias to avoid conflict if main also defines 'server'
+use omnirust::graphql; 
+use omnirust::graphql::schema::QueryRoot;
+use omnirust::websocket::server as websocket_server;
+use omnirust::cli::arg_parser::{self, Commands, UtilCommands}; // Import CLI parser and enums
+use omnirust::utils::string_utils; // For utility functions
 
 use async_graphql::{Schema, EmptyMutation, EmptySubscription};
 use tokio::net::TcpListener;
@@ -12,38 +14,93 @@ use tokio_tungstenite::accept_async;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    // Initialize logger early, as it might be used by arg parsing or config loading.
     init_logger();
 
-    let config = AppConfig::load()?;
-    log_info(&format!("Database URL: {}", config.database_url)); // Log database URL
-    log_info(&format!("Log Level: {}", config.log_level));       // Log log level
+    // Parse CLI arguments
+    let cli_args = arg_parser::parse_args();
 
-    // The QueryRoot might need to be adjusted if its definition or dependencies change
-    // For now, assuming it's self-contained or its dependencies are correctly handled within the graphql module
+    // Handle CLI commands if provided
+    if let Some(command) = cli_args.command {
+        match command {
+            Commands::Test(test_args) => {
+                if test_args.list {
+                    println!("Listing all tests (not implemented yet)...");
+                } else if let Some(case) = &test_args.case {
+                    println!("Running test case: {} (not implemented yet)...", case);
+                } else {
+                    println!("Running all tests (not implemented yet)...");
+                }
+            }
+            Commands::Util(util_args) => {
+                match util_args.command {
+                    UtilCommands::Reverse { input_string } => {
+                        let reversed = string_utils::reverse(&input_string);
+                        println!("Reversed string: {}", reversed);
+                    }
+                    UtilCommands::IsBlank { input_string } => {
+                        let is_blank = string_utils::is_blank(&input_string);
+                        println!("Is blank: {}", is_blank);
+                    }
+                }
+            }
+        }
+        return Ok(()); // Exit after handling CLI command
+    }
+
+    // If no specific CLI command was handled, proceed with default server startup
+    log_info("No specific CLI command given, starting default servers...");
+
+    let config = AppConfig::load()?;
+    log_info(&format!("Database URL: {}", config.database_url));
+    log_info(&format!("Log Level: {}", config.log_level));
+
     let schema = Schema::build(QueryRoot { system_status: "System is running".to_string() }, EmptyMutation, EmptySubscription).finish();
 
+    // Spawn GraphQL server
+    let gql_schema = schema.clone(); // Clone schema for the GraphQL server
     tokio::spawn(async move {
-        if let Err(e) = graphql::server::start_server(schema).await {
+        if let Err(e) = graphql::server::start_server(gql_schema).await {
             log_error(&format!("Error starting GraphQL server: {}", e));
         }
     });
+    
+    // Start REST API Server (example, assuming port 3000)
+    // You might want to make the address configurable
+    // tokio::spawn(async {
+    //     if let Err(e) = omnirust::web::rest_api::start_rest_server("127.0.0.1:3000").await {
+    //         log_error(&format!("Error starting REST API server: {}", e));
+    //     }
+    // });
 
-    let listener = TcpListener::bind("127.0.0.1:8080").await?;
+    // Start WebSocket server
+    let ws_listener = TcpListener::bind("127.0.0.1:8080").await?;
     log_info("WebSocket server started at ws://127.0.0.1:8080");
 
-    while let Ok((stream, _)) = listener.accept().await {
-        // let stream = stream; // This line is redundant
-        tokio::spawn(async move {
-            match accept_async(stream).await {
-                Ok(ws_stream) => {
-                    if let Err(e) = websocket_server::handle_connection(ws_stream).await {
-                        log_error(&format!("Error handling connection: {}", e));
+    loop {
+        match ws_listener.accept().await {
+            Ok((stream, _addr)) => {
+                tokio::spawn(async move {
+                    match accept_async(stream).await {
+                        Ok(ws_stream) => {
+                            if let Err(e) = websocket_server::handle_connection(ws_stream).await {
+                                log_error(&format!("Error handling WebSocket connection: {}", e));
+                            }
+                        },
+                        Err(e) => log_error(&format!("Error accepting WebSocket connection: {}", e)),
                     }
-                },
-                Err(e) => log_error(&format!("Error accepting WebSocket connection: {}", e)),
+                });
             }
-        });
+            Err(e) => {
+                log_error(&format!("Failed to accept WebSocket client: {}", e));
+                // Consider if the loop should break or continue on accept errors
+            }
+        }
     }
 
-    Ok(())
+    // Note: The loop above is infinite. Graceful shutdown for servers would need
+    // to be handled, perhaps by listening for signals in the main task and
+    // coordinating shutdown of spawned server tasks.
+    // For now, Ctrl+C will terminate the process.
+    // Ok(()) // This line is unreachable due to the infinite loop
 }
