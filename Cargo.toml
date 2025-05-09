@@ -26,6 +26,8 @@ prost-types = "0.13.5"
 futures-util = "0.3" # For StreamExt, SinkExt
 async-trait = "0.1"
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "macros", "offline"] }
+ndarray = { version = "0.15", features = ["serde"] }
+num-traits = "0.2"
 
 [build-dependencies]
 tonic-build = { version = "0.13.1", features = ["prost"] }
