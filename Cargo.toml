@@ -26,7 +26,8 @@ prost-types = "0.13.5"
 futures-util = "0.3" # For StreamExt, SinkExt
 
 [build-dependencies]
-# tonic-build and prost-build removed as build.rs is minimal
+tonic-build = { version = "0.13.1", features = ["prost"] }
+prost-build = "0.13"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
