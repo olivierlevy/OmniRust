@@ -19,42 +19,55 @@
 // The following is a very conceptual and minimal example structure.
 // A real TUI app would be much more involved.
 
-/*
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
+    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{
     backend::{Backend, CrosstermBackend},
-    layout::{Constraint, Direction, Layout},
+    layout::{Alignment, Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
-    text::{Span, Line},
-    widgets::{Block, Borders, Paragraph, List, ListItem},
+    text::{Line, Span},
+    widgets::{Block, Borders, Paragraph},
     Frame, Terminal,
 };
 use std::{io, time::{Duration, Instant}};
 
-struct AppState {
-    // Example state
-    input: String,
-    messages: Vec<String>,
+struct CounterApp {
+    counter: i32,
     should_quit: bool,
 }
 
-impl Default for AppState {
-    fn default() -> AppState {
-        AppState {
-            input: String::new(),
-            messages: vec!["Welcome to OmniRust TUI!".to_string()],
+impl Default for CounterApp {
+    fn default() -> Self {
+        CounterApp {
+            counter: 0,
             should_quit: false,
         }
     }
 }
 
-/// Example function to run a simple TUI application.
-/// This is a conceptual sketch and would need to be part of a binary target.
-pub fn run_example_tui_app() -> Result<(), Box<dyn std::error::Error>> {
+impl CounterApp {
+    fn on_key(&mut self, key: KeyCode) {
+        match key {
+            KeyCode::Char('q') | KeyCode::Esc => {
+                self.should_quit = true;
+            }
+            KeyCode::Char('+') | KeyCode::Char('=') | KeyCode::Right => {
+                self.counter += 1;
+            }
+            KeyCode::Char('-') | KeyCode::Left => {
+                self.counter -= 1;
+            }
+            _ => {}
+        }
+    }
+}
+
+
+/// Runs a simple counter TUI application.
+pub fn run_counter_tui_app() -> Result<(), Box<dyn std::error::Error>> {
     // Setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -62,35 +75,22 @@ pub fn run_example_tui_app() -> Result<(), Box<dyn std::error::Error>> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let mut app_state = AppState::default();
-    let tick_rate = Duration::from_millis(250); // Refresh rate
+    let mut app = CounterApp::default();
+    let tick_rate = Duration::from_millis(250);
 
     loop {
-        terminal.draw(|f| ui(f, &app_state))?;
+        terminal.draw(|f| ui(f, &app))?;
 
         if crossterm::event::poll(tick_rate)? {
-            if let Event::Key(key) = event::read()? {
-                match key.code {
-                    KeyCode::Enter => {
-                        if !app_state.input.is_empty() {
-                            app_state.messages.push(app_state.input.drain(..).collect());
-                        }
-                    }
-                    KeyCode::Char(c) => {
-                        app_state.input.push(c);
-                    }
-                    KeyCode::Backspace => {
-                        app_state.input.pop();
-                    }
-                    KeyCode::Esc | KeyCode::Char('q') => {
-                        app_state.should_quit = true;
-                    }
-                    _ => {}
+            if let Event::Key(key_event) = event::read()? {
+                // Ensure we only react on key press, not release or repeat
+                if key_event.kind == KeyEventKind::Press {
+                     app.on_key(key_event.code);
                 }
             }
         }
 
-        if app_state.should_quit {
+        if app.should_quit {
             break;
         }
     }
@@ -107,57 +107,58 @@ pub fn run_example_tui_app() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn ui<B: Backend>(f: &mut Frame<B>, app: &AppState) {
+fn ui<B: Backend>(f: &mut Frame<B>, app: &CounterApp) {
+    let size = f.size();
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .margin(1)
-        .constraints(
-            [
-                Constraint::Length(3), // For input
-                Constraint::Min(1),    // For messages
-                Constraint::Length(1), // For status/help
-            ]
-            .as_ref(),
-        )
-        .split(f.size());
+        .constraints([
+            Constraint::Percentage(80), // Main content area
+            Constraint::Percentage(20), // Help text area
+        ])
+        .split(size);
 
-    let input_text = Paragraph::new(app.input.as_str())
+    let counter_text = format!("Counter: {}", app.counter);
+    let paragraph = Paragraph::new(counter_text)
         .style(Style::default().fg(Color::Yellow))
-        .block(Block::default().borders(Borders::ALL).title("Input"));
-    f.render_widget(input_text, chunks[0]);
+        .block(Block::default().borders(Borders::ALL).title("Counter App"))
+        .alignment(Alignment::Center);
+    f.render_widget(paragraph, chunks[0]);
 
-    let messages: Vec<ListItem> = app
-        .messages
-        .iter()
-        .map(|m| ListItem::new(Line::from(m.clone())))
-        .collect();
-    let messages_list = List::new(messages)
-        .block(Block::default().borders(Borders::ALL).title("Messages"))
-        .style(Style::default().fg(Color::White));
-    f.render_widget(messages_list, chunks[1]);
-    
-    let help_text = Paragraph::new("Press 'q' or Esc to quit. Enter to send message.")
-        .style(Style::default().fg(Color::Cyan));
-    f.render_widget(help_text, chunks[2]);
-}
-*/
-
-pub fn placeholder_tui_function() {
-    println!("This is a placeholder for TUI component functionality.");
-    println!("To run a real TUI, you'd typically have a main function that initializes");
-    println!("the terminal, runs an event loop, and draws widgets using a library like Ratatui.");
+    let help_text = Paragraph::new("Press '+' or Right Arrow to increment, '-' or Left Arrow to decrement. 'q' or Esc to quit.")
+        .style(Style::default().fg(Color::Cyan))
+        .alignment(Alignment::Center);
+    f.render_widget(help_text, chunks[1]);
 }
 
+// No direct tests for run_counter_tui_app as it's interactive.
+// Unit tests can be added for AppState logic if it becomes more complex.
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_tui_placeholder() {
-        // This is a trivial test for the placeholder.
-        // Real TUI testing is complex and often involves snapshot testing
-        // or simulating events and checking terminal buffer states.
-        placeholder_tui_function(); // Just call it to ensure it compiles
-        assert!(true); // Placeholder assertion
+    fn test_counter_app_logic() {
+        let mut app = CounterApp::default();
+        assert_eq!(app.counter, 0);
+
+        app.on_key(KeyCode::Char('+'));
+        assert_eq!(app.counter, 1);
+
+        app.on_key(KeyCode::Right);
+        assert_eq!(app.counter, 2);
+        
+        app.on_key(KeyCode::Char('-'));
+        assert_eq!(app.counter, 1);
+
+        app.on_key(KeyCode::Left);
+        assert_eq!(app.counter, 0);
+
+        assert!(!app.should_quit);
+        app.on_key(KeyCode::Char('q'));
+        assert!(app.should_quit);
+
+        let mut app2 = CounterApp::default();
+        app2.on_key(KeyCode::Esc);
+        assert!(app2.should_quit);
     }
 }

@@ -1,13 +1,15 @@
 // Use the omnirust library crate
 use omnirust::core::init_logger::{init_logger, log_info, log_error};
 use omnirust::core::config::AppConfig;
-use omnirust::graphql; 
-use omnirust::graphql::schema::{QueryRoot, MutationRoot, SubscriptionRoot}; // Added SubscriptionRoot
+// NOTE: The following block was duplicated by the previous tool use and is now corrected.
+use omnirust::graphql;
+use omnirust::graphql::schema::{QueryRoot, MutationRoot, SubscriptionRoot};
 use omnirust::websocket::server as websocket_server;
-use omnirust::cli::arg_parser::{self, Commands, UtilCommands}; // Import CLI parser and enums
-use omnirust::utils::string_utils; // For utility functions
+use omnirust::cli::arg_parser::{self, Commands, UtilCommands};
+use omnirust::cli::tui_components; // Added TUI components import
+use omnirust::utils::string_utils;
 
-use async_graphql::Schema; // Removed EmptyMutation, EmptySubscription as they are not directly used here now
+use async_graphql::Schema;
 use tokio::net::TcpListener;
 use std::error::Error;
 use tokio_tungstenite::accept_async;
@@ -42,6 +44,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         let is_blank = string_utils::is_blank(&input_string);
                         println!("Is blank: {}", is_blank);
                     }
+                }
+            }
+            Commands::TuiCounter => {
+                log_info("Launching TUI Counter application...");
+                if let Err(e) = tui_components::run_counter_tui_app() {
+                    log_error(&format!("TUI application error: {}", e));
+                    // Depending on desired behavior, you might want to return an error code
+                    // For now, just log and exit gracefully.
                 }
             }
         }

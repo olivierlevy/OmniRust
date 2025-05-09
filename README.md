@@ -18,9 +18,9 @@ OmniRust offers a wide array of functionalities, including but not limited to:
     *   Tree (`data_structures::tree`)
     *   Graph (`data_structures::graph`)
     *   Circular Buffer (`data_structures::circular_buffer`)
-*   **Command-Line Interface (CLI)**:
-    *   Argument parsing (`cli::arg_parser`)
-    *   Terminal User Interface (TUI) components (conceptual)
+*   **Command-Line Interface (CLI)** (`cli` module):
+    *   Argument parsing (`cli::arg_parser`) using `clap`.
+    *   Basic TUI (Terminal User Interface) example: a counter application (`cli::tui_components`) using `ratatui` and `crossterm`.
 *   **Networking**:
     *   Asynchronous HTTP Client (`networking::http_client`)
     *   WebSocket Client & Server (conceptual, see `websocket` and `networking` modules)
@@ -82,6 +82,8 @@ The GraphQL server will typically be available at `http://127.0.0.1:PORT/graphql
 To pass arguments to the OmniRust CLI:
 ```sh
 cargo run -- util reverse "hello from omnirust cli"
+# To run the TUI counter demo:
+cargo run -- tui-counter
 ```
 
 Check `src/main.rs` in the OmniRust project root to see what the main binary is configured to do.

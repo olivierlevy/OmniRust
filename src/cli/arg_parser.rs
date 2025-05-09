@@ -35,6 +35,10 @@ pub enum Commands {
     /// Includes string manipulation, file operations, etc.
     #[command(visible_alias = "utils")]
     Util(UtilArgs),
+    
+    /// Launches a simple TUI counter application.
+    #[command(visible_alias = "tui")]
+    TuiCounter,
     // Add more subcommands for different components like 'server', 'db', 'ml', etc.
     // Example:
     // /// Starts one of the OmniRust servers (e.g., GraphQL, REST, WebSocket).
