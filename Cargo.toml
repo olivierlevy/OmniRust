@@ -34,6 +34,8 @@ askama = { version = "0.12", features = ["with-axum"] }
 askama_axum = "0.4" # For direct Askama template response type in Axum
 wasm-bindgen = "0.2" # Optional, only if compiling parts of the lib to Wasm
 clap = { version = "4.5", features = ["derive"] }
+ratatui = { version = "0.27", features = ["all-widgets", "crossterm"] }
+crossterm = "0.27"
 
 [build-dependencies]
 tonic-build = { version = "0.13.1", features = ["prost"] }
