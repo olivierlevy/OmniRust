@@ -60,9 +60,8 @@ impl AppConfig {
     pub fn load() -> Result<Self, Box<dyn Error>> {
         let settings = Config::builder()
             // Load configuration from `config.toml` (or `config.yaml`, `config.json`, etc.)
-            // The `config` crate automatically detects the file extension.
-            // `required(true)` means it will error if "config.*" is not found.
-            .add_source(File::with_name("config").required(true))
+            // Make it optional: .required(false)
+            .add_source(File::with_name("config").required(false))
             // Allow overriding configuration with environment variables.
             // Variables should be prefixed with "APP_" (e.g., APP_DATABASE__URL for nested keys).
             // The separator `_` is used for nested keys (e.g., `database.url` becomes `APP_DATABASE_URL`).
@@ -71,12 +70,12 @@ impl AppConfig {
             .add_source(Environment::with_prefix("APP").separator("_"))
             .build()?;
 
-        // Attempt to retrieve each configuration value, returning an error if any are missing or of the wrong type.
+        // Attempt to retrieve each configuration value, providing defaults if not found.
         Ok(AppConfig {
-            database_url: settings.get::<String>("database.url")
-                .map_err(|e| format!("Missing or invalid 'database.url': {}", e))?,
-            log_level: settings.get::<String>("log.level")
-                .map_err(|e| format!("Missing or invalid 'log.level': {}", e))?,
+            database_url: settings.get_string("database.url")
+                .unwrap_or_else(|_| "postgres://user:password@localhost/default_omnirust_db".to_string()),
+            log_level: settings.get_string("log.level")
+                .unwrap_or_else(|_| "info".to_string()),
             // Example for adding a new field with a default:
             // server_port: settings.get::<u16>("server.port").unwrap_or(8080),
         })

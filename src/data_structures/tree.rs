@@ -210,7 +210,7 @@ mod tests {
 
     #[test]
     fn test_tree_structure_and_display() {
-        let mut tree = Tree::with_root("FileSystem".to_string());
+        let tree = Tree::with_root("FileSystem".to_string());
         if let Some(root) = &tree.root {
             let mut root_mut = root.borrow_mut();
             let usr_rc = root_mut.add_child("usr".to_string());

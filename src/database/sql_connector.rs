@@ -202,7 +202,7 @@ mod tests {
         let connect_options = PgConnectOptions::from_str(&db_url)
             .expect("Failed to parse DB URL for connect options");
             
-        let mut conn_result = PostgresConnection::connect(connect_options).await;
+        let conn_result = PostgresConnection::connect(connect_options).await;
         assert!(conn_result.is_ok(), "Failed to connect: {:?}", conn_result.err());
 
         if let Ok(mut conn) = conn_result {

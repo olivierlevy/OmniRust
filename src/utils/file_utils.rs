@@ -25,7 +25,6 @@ pub fn path_exists<P: AsRef<Path>>(path: P) -> bool {
 mod tests {
     use super::*;
     use std::fs::File;
-    use std::io::Read;
     use tempfile::tempdir;
 
     #[test]
