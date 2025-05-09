@@ -2,4 +2,4 @@
 
 pub mod tree;
 pub mod graph;
-// pub mod circular_buffer; // Placeholder for circular buffer
+pub mod circular_buffer;
