@@ -25,11 +25,13 @@ OmniRust offers a wide array of functionalities, including but not limited to:
     *   Asynchronous HTTP Client (`networking::http_client`)
     *   WebSocket Client & Server (conceptual, see `websocket` and `networking` modules)
     *   gRPC integration (conceptual, see `networking::grpc` module)
-*   **Web Services**:
-    *   REST API framework (e.g., using Axum - see `web::rest_api`)
-    *   HTML Templating (e.g., using Askama - see `web::templating`)
-    *   GraphQL API Server (`graphql` module)
-    *   WebAssembly (Wasm) support (conceptual, see `web::wasm`)
+*   **Web Services** (`web` module):
+    *   REST API framework (using Axum in `web::rest_api`):
+        *   Example routes for basic CRUD operations.
+        *   Basic token-based authentication middleware (`web::auth`).
+    *   HTML Templating (using Askama in `web::templating`).
+    *   GraphQL API Server (`graphql` module).
+    *   WebAssembly (Wasm) support (conceptual in `web::wasm`).
 *   **Database Interaction** (`database` module):
     *   Generic traits for `DbConnection` and `DbConnectionPool`.
     *   PostgreSQL connector (`sql_connector.rs`) implementing these traits using `sqlx`.

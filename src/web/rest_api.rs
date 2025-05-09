@@ -1,12 +1,14 @@
 // src/web/rest_api.rs
 
 use axum::{
-    routing::get, // Removed post
+    routing::get,
     http::StatusCode,
     response::IntoResponse,
     Json, Router,
+    middleware, // Added for middleware
 };
 use serde::{Deserialize, Serialize};
+use crate::web::auth::token_auth_middleware; // Import the auth middleware
 use std::net::SocketAddr;
 use tokio::net::TcpListener; // Added for Axum 0.7 server
 use tokio::signal; // For graceful shutdown
@@ -47,11 +49,18 @@ async fn hello_world() -> &'static str {
     "Hello, OmniRust REST API!"
 }
 
+/// Handler for the protected route
+async fn protected_route_handler() -> (StatusCode, &'static str) {
+    (StatusCode::OK, "This is a protected route. Authentication successful!")
+}
+
 /// Configures and returns the Axum router.
 pub fn app_router() -> Router {
     Router::new()
         .route("/hello", get(hello_world))
         .route("/users", get(get_users).post(create_user))
+        .route("/protected", get(protected_route_handler))
+            .route_layer(middleware::from_fn(token_auth_middleware))
     // Add more routes here
 }
 
@@ -165,5 +174,75 @@ mod tests {
         assert_eq!(users.len(), 1);
         assert_eq!(users[0].username, "testuser");
         assert_eq!(users[0].id, created_user.id);
+    }
+
+    #[tokio::test]
+    async fn test_protected_route_valid_token() {
+        let app = app_router();
+        let valid_token = crate::web::auth::EXPECTED_AUTH_TOKEN; // Access the token from auth module
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/protected")
+                    .header("Authorization", format!("Bearer {}", valid_token))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        assert_eq!(&body[..], b"This is a protected route. Authentication successful!");
+    }
+
+    #[tokio::test]
+    async fn test_protected_route_invalid_token() {
+        let app = app_router();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/protected")
+                    .header("Authorization", "Bearer invalid-token")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_protected_route_missing_bearer_prefix() {
+        let app = app_router();
+        let valid_token = crate::web::auth::EXPECTED_AUTH_TOKEN;
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/protected")
+                    .header("Authorization", valid_token) // Missing "Bearer "
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_protected_route_no_auth_header() {
+        let app = app_router();
+
+        let response = app
+            .oneshot(Request::builder().uri("/protected").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 }
