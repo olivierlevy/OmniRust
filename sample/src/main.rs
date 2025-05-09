@@ -1,9 +1,9 @@
-// Declare modules for each showcase
-mod showcase_core;
-mod showcase_utils;
-mod showcase_data_structures;
-mod showcase_cli;
-mod showcase_networking;
+// Use modules from the omnirust_sample_app library
+use omnirust_sample_app::showcase_core;
+use omnirust_sample_app::showcase_utils;
+use omnirust_sample_app::showcase_data_structures;
+use omnirust_sample_app::showcase_cli;
+use omnirust_sample_app::showcase_networking;
 
 use omnirust::core::init_logger::{init_logger, log_info};
 use anyhow::Result;
