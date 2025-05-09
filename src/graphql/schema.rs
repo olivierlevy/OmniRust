@@ -1,13 +1,13 @@
 use async_graphql::{Context, Object, Result, SimpleObject, ID, Subscription}; // Removed Schema, EmptySubscription, value from main imports
-use std::sync::Mutex;
 use once_cell::sync::Lazy;
 use std::collections::HashMap; // Using HashMap for easier ID management for now
+use tokio::sync::Mutex; // Changed from std::sync::Mutex for ITEMS and NEXT_ID
 use tokio::sync::broadcast::{self, Sender}; // Removed Receiver
 use futures_util::stream::Stream; // Removed StreamExt
 // Removed unused: use futures_util::StreamExt; 
 
 
-// In-memory store for items
+// In-memory store for items - now using tokio::sync::Mutex
 static ITEMS: Lazy<Mutex<HashMap<String, Item>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 static NEXT_ID: Lazy<Mutex<u32>> = Lazy::new(|| Mutex::new(1));
 
@@ -63,14 +63,14 @@ impl QueryRoot {
 
     /// Retrieves a list of all available items.
     async fn items(&self, _ctx: &Context<'_>) -> Result<Vec<Item>> {
-        let items_guard = ITEMS.lock().unwrap();
+        let items_guard = ITEMS.lock().await; // Changed to .await
         Ok(items_guard.values().cloned().collect())
     }
 
     /// Retrieves a specific item by its unique ID.
     /// Returns `null` if no item with the given ID is found.
     async fn item(&self, _ctx: &Context<'_>, id: ID) -> Result<Option<Item>> {
-        let items_guard = ITEMS.lock().unwrap();
+        let items_guard = ITEMS.lock().await; // Changed to .await
         Ok(items_guard.get(id.as_str()).cloned())
     }
 }
@@ -85,8 +85,8 @@ impl MutationRoot {
     /// Takes a `name` for the new item and returns the created `Item`
     /// with a server-generated ID.
     async fn add_item(&self, _ctx: &Context<'_>, name: String) -> Result<Item> {
-        let mut items_guard = ITEMS.lock().unwrap();
-        let mut id_guard = NEXT_ID.lock().unwrap();
+        let mut items_guard = ITEMS.lock().await; // Changed to .await
+        let mut id_guard = NEXT_ID.lock().await; // Changed to .await
 
         let new_id = *id_guard;
         *id_guard += 1;
@@ -110,7 +110,7 @@ impl MutationRoot {
     /// If `name` is provided, the item's name will be updated.
     /// Returns the updated `Item` if found, otherwise `null`.
     async fn update_item(&self, _ctx: &Context<'_>, id: ID, name: Option<String>) -> Result<Option<Item>> {
-        let mut items_guard = ITEMS.lock().unwrap();
+        let mut items_guard = ITEMS.lock().await; // Changed to .await
         if let Some(item_ref) = items_guard.get_mut(id.as_str()) {
             if let Some(n) = name {
                 item_ref.name = n;
@@ -131,7 +131,7 @@ impl MutationRoot {
     /// Takes the `id` of the item to delete.
     /// Returns `true` if the item was found and deleted, `false` otherwise.
     async fn delete_item(&self, _ctx: &Context<'_>, id: ID) -> Result<bool> {
-        let mut items_guard = ITEMS.lock().unwrap();
+        let mut items_guard = ITEMS.lock().await; // Changed to .await
         if let Some(deleted_item) = items_guard.remove(id.as_str()) {
             // Broadcast event
             let event = ItemEvent { event_type: "DELETED".to_string(), item: deleted_item };
@@ -182,10 +182,15 @@ mod tests {
     use super::*;
     use async_graphql::Schema; // Schema is used in tests, removed value
     use futures_util::StreamExt; // Added StreamExt for .next() on streams within tests
-    use once_cell::sync::Lazy; // For TEST_MUTEX
-    use std::sync::Mutex;    // For TEST_MUTEX
+    // use once_cell::sync::Lazy; // No longer needed for TEST_MUTEX if it's also tokio::sync::Mutex
+    use tokio::sync::Mutex;    // For async TEST_MUTEX and now ITEMS/NEXT_ID implicitly
+    use tokio::task; // For task::yield_now()
+    use tokio::time::{sleep, Duration}; // For sleep
 
-    // Mutex to serialize tests modifying shared static state (ITEMS, NEXT_ID)
+    // Async Mutex to serialize tests modifying shared static state (ITEMS, NEXT_ID)
+    // Note: ITEMS and NEXT_ID are already tokio::sync::Mutex, so this TEST_MUTEX might be redundant
+    // if tests are structured to lock ITEMS/NEXT_ID directly and serially.
+    // However, keeping it for explicit test case serialization.
     static TEST_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
     fn create_schema() -> Schema<QueryRoot, MutationRoot, SubscriptionRoot> {
@@ -194,11 +199,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_add_item_mutation() {
-        let _guard = TEST_MUTEX.lock().unwrap(); // Lock to ensure test serializes
+        let _guard = TEST_MUTEX.lock().await; // Async lock for test case serialization
         
-        // Setup: Clear state
-        ITEMS.lock().unwrap().clear(); 
-        *NEXT_ID.lock().unwrap() = 1;
+        // Setup: Clear state using async locks
+        ITEMS.lock().await.clear(); 
+        *NEXT_ID.lock().await = 1;
 
         let schema = create_schema();
         let query = r#"
@@ -235,20 +240,18 @@ mod tests {
         assert_eq!(data_item["item"]["name"].as_str().unwrap(), "Test Item 1");
         assert_eq!(data_item["item"]["id"].as_str().unwrap(), item_id_from_add);
 
-        // Clean up static storage for other tests if necessary, though for this simple test it's okay.
-        // For more complex scenarios, consider dependency injection for the store.
-        // Teardown: Clear state (optional here if next test also clears, but good practice)
-        ITEMS.lock().unwrap().clear();
-        *NEXT_ID.lock().unwrap() = 1;
+        // Teardown: Clear state using async locks
+        ITEMS.lock().await.clear();
+        *NEXT_ID.lock().await = 1;
     }
 
     #[tokio::test]
     async fn test_items_query_empty() {
-        let _guard = TEST_MUTEX.lock().unwrap(); // Lock to ensure test serializes
+        let _guard = TEST_MUTEX.lock().await; // Async lock for test case serialization
 
-        // Setup: Clear state
-        ITEMS.lock().unwrap().clear(); 
-        *NEXT_ID.lock().unwrap() = 1;
+        // Setup: Clear state using async locks
+        ITEMS.lock().await.clear(); 
+        *NEXT_ID.lock().await = 1;
 
         let schema = create_schema();
         let query = r#"
@@ -263,9 +266,9 @@ mod tests {
         let data = res.data.into_json().unwrap();
         assert!(data["items"].as_array().unwrap().is_empty());
 
-        // Teardown
-        ITEMS.lock().unwrap().clear();
-        *NEXT_ID.lock().unwrap() = 1;
+        // Teardown: Clear state using async locks
+        ITEMS.lock().await.clear();
+        *NEXT_ID.lock().await = 1;
     }
 
     #[tokio::test]
@@ -283,11 +286,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_update_item_mutation() {
-        let _guard = TEST_MUTEX.lock().unwrap(); // Lock to ensure test serializes
+        let _guard = TEST_MUTEX.lock().await; // Async lock for test case serialization
 
-        // Setup: Clear state
-        ITEMS.lock().unwrap().clear();
-        *NEXT_ID.lock().unwrap() = 1;
+        // Setup: Clear state using async locks
+        ITEMS.lock().await.clear();
+        *NEXT_ID.lock().await = 1;
         let schema = create_schema();
 
         // Add an item first
@@ -328,17 +331,18 @@ mod tests {
         let res_non_existent = schema.execute(update_non_existent_query).await;
         assert!(res_non_existent.data.into_json().unwrap()["updateItem"].is_null());
         
-        ITEMS.lock().unwrap().clear();
-        *NEXT_ID.lock().unwrap() = 1;
+        // Teardown: Clear state using async locks
+        ITEMS.lock().await.clear();
+        *NEXT_ID.lock().await = 1;
     }
 
     #[tokio::test]
     async fn test_delete_item_mutation() {
-        let _guard = TEST_MUTEX.lock().unwrap(); // Lock to ensure test serializes
+        let _guard = TEST_MUTEX.lock().await; // Async lock for test case serialization
 
-        // Setup: Clear state
-        ITEMS.lock().unwrap().clear();
-        *NEXT_ID.lock().unwrap() = 1;
+        // Setup: Clear state using async locks
+        ITEMS.lock().await.clear();
+        *NEXT_ID.lock().await = 1;
         let schema = create_schema();
 
         // Add an item first
@@ -363,18 +367,19 @@ mod tests {
         let res_non_existent = schema.execute(delete_non_existent_query).await;
         let data_non_existent = res_non_existent.data.into_json().unwrap();
         assert_eq!(data_non_existent["deleteItem"].as_bool().unwrap(), false);
-        
-        ITEMS.lock().unwrap().clear();
-        *NEXT_ID.lock().unwrap() = 1;
+
+        // Teardown: Clear state using async locks
+        ITEMS.lock().await.clear();
+        *NEXT_ID.lock().await = 1;
     }
 
     #[tokio::test]
     async fn test_item_events_subscription() {
-        let _guard = TEST_MUTEX.lock().unwrap(); // Lock to ensure test serializes
+        let _guard = TEST_MUTEX.lock().await; // Async lock for test case serialization
 
-        // Setup: Clear state
-        ITEMS.lock().unwrap().clear();
-        *NEXT_ID.lock().unwrap() = 1;
+        // Setup: Clear state using async locks
+        ITEMS.lock().await.clear();
+        *NEXT_ID.lock().await = 1;
         let schema = create_schema();
 
         // Start the subscription
@@ -388,6 +393,9 @@ mod tests {
         let added_item_id = add_data["addItem"]["id"].as_str().unwrap().to_string();
         let added_item_name = add_data["addItem"]["name"].as_str().unwrap().to_string();
 
+        task::yield_now().await; // Yield to allow event processing
+        sleep(Duration::from_millis(10)).await; // Small delay
+
         // Check for ADDED event
         let event_res = stream.next().await.unwrap(); // Now await on stream.next()
         let event_data = event_res.data.into_json().unwrap();
@@ -398,6 +406,9 @@ mod tests {
         // Perform updateItem mutation
         let update_mutation = format!(r#"mutation {{ updateItem(id: "{}", name: "Sub Item 1 Updated") {{ id name }} }}"#, added_item_id);
         let _update_res = schema.execute(update_mutation).await;
+
+        task::yield_now().await; // Yield to allow event processing
+        sleep(Duration::from_millis(10)).await; // Small delay
         
         // Check for UPDATED event
         let event_res_update = stream.next().await.unwrap();
@@ -410,6 +421,9 @@ mod tests {
         let delete_mutation = format!(r#"mutation {{ deleteItem(id: "{}") }}"#, added_item_id);
         let _delete_res = schema.execute(delete_mutation).await;
 
+        task::yield_now().await; // Yield to allow event processing
+        sleep(Duration::from_millis(10)).await; // Small delay
+
         // Check for DELETED event
         let event_res_delete = stream.next().await.unwrap();
         let event_data_delete = event_res_delete.data.into_json().unwrap();
@@ -418,8 +432,8 @@ mod tests {
         // The name of the deleted item might still be the last known name, which is "Sub Item 1 Updated"
         assert_eq!(event_data_delete["itemEvents"]["item"]["name"].as_str().unwrap(), "Sub Item 1 Updated");
 
-
-        ITEMS.lock().unwrap().clear();
-        *NEXT_ID.lock().unwrap() = 1;
+        // Teardown: Clear state using async locks
+        ITEMS.lock().await.clear();
+        *NEXT_ID.lock().await = 1;
     }
 }
