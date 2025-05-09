@@ -1,0 +1,38 @@
+# OmniRust Example Configuration File
+#
+# This file shows the available configuration options for an OmniRust application.
+# You can copy this file to `config.toml` (or `config.yaml`, `config.json`, etc.)
+# in the same directory as the executable (or the project root during development)
+# and modify the values as needed.
+#
+# Settings can also be overridden by environment variables prefixed with "APP_",
+# using "_" as a separator for nested keys.
+# For example, `database.url` can be set by `APP_DATABASE_URL`.
+
+# Database configuration
+[database]
+# The connection URL for the primary PostgreSQL database.
+# Format: postgresql://[user[:password]@][host][:port][/database][?param1=value1&...]
+# Default if not specified: "postgres://user:password@localhost/default_omnirust_db"
+url = "postgres://your_user:your_password@your_host:5432/your_database_name"
+
+# Logging configuration
+[log]
+# The logging level for the application.
+# Supported levels (from most to least verbose): "trace", "debug", "info", "warn", "error".
+# Default if not specified: "info"
+level = "info"
+
+# Example of other potential sections (uncomment and configure if these features are added to AppConfig):
+# [server]
+# port = 8000 # Example: Port for the main web server (e.g., REST or GraphQL HTTP endpoint)
+# address = "0.0.0.0" # Example: Address to bind the server to
+
+# [cache]
+# type = "redis" # Example: "memory" or "redis"
+# redis_url = "redis://127.0.0.1/" # Example: if type is "redis"
+# default_ttl_seconds = 3600 # Example: Default time-to-live for cache entries
+
+# [external_services]
+# some_api_key = "your_api_key_here"
+# some_service_url = "https://api.example.com/v1"
